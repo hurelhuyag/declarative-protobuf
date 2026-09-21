@@ -33,9 +33,10 @@ jobs:
           java-version: ${{ matrix.java }}
           cache: maven
 
-      # api + processor + example (real protoc via protobuf-maven-plugin) + benchmark wire-compatibility tests
+      # api + processor + example (real protoc via protobuf-maven-plugin) + benchmark wire-compatibility tests.
+      # install, not verify: the single-module steps below (-pl example) resolve the sibling modules from ~/.m2
       - name: Build and test
-        run: mvn -B --no-transfer-progress verify
+        run: mvn -B --no-transfer-progress install
 
       - name: Run the example
         run: >
