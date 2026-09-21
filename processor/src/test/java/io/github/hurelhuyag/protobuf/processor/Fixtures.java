@@ -33,8 +33,8 @@ final class Fixtures {
     static final String ORDER = """
         package fixture;
 
-        import com.google.protobuf.ByteString;
         import io.github.hurelhuyag.protobuf.*;
+        import java.nio.ByteBuffer;
         import java.time.Duration;
         import java.time.Instant;
         import java.util.List;
@@ -52,7 +52,7 @@ final class Fixtures {
             @Proto(8) Instant createdAt,
             @Proto(9) String card,
             @Proto(10) Long cashCents,
-            @Proto(11) ByteString blob,
+            @Proto(11) ByteBuffer blob,
             @Proto(12) Line primary,
             @Proto(13) List<Status> history,
             @Proto(14) int delta,
@@ -109,7 +109,8 @@ final class Fixtures {
     static final String SAMPLES = """
         package fixture;
 
-        import com.google.protobuf.ByteString;
+        import java.nio.ByteBuffer;
+        import java.nio.charset.StandardCharsets;
         import java.time.Duration;
         import java.time.Instant;
         import java.util.List;
@@ -127,7 +128,7 @@ final class Fixtures {
                     0,
                     Instant.ofEpochSecond(1_700_000_000L, 123),
                     "visa", null,
-                    ByteString.copyFromUtf8("xyz"),
+                    ByteBuffer.wrap("xyz".getBytes(StandardCharsets.UTF_8)),
                     new Line("p", 3, 2.0),
                     List.of(Status.OPEN, Status.CLOSED),
                     -5, 0xDEADBEEFL, true, -1, 1.5f,
@@ -143,21 +144,24 @@ final class Fixtures {
             public static Order empty() {
                 return new Order(
                     0L, "", List.of(), List.of(), Map.of(), Status.UNSPECIFIED, null, null, null, null,
-                    ByteString.EMPTY, null, List.of(), 0, 0L, false, 0, 0f, Map.of(), null, null, List.of(), 0, null
+                    ByteBuffer.allocate(0), null, List.of(), 0, 0L, false, 0, 0f, Map.of(), null, null, List.of(), 0,
+                    null
                 );
             }
 
             public static Order bothPayments() {
                 return new Order(
                     0L, "", List.of(), List.of(), Map.of(), Status.UNSPECIFIED, null, null, "visa", 5L,
-                    ByteString.EMPTY, null, List.of(), 0, 0L, false, 0, 0f, Map.of(), null, null, List.of(), 0, null
+                    ByteBuffer.allocate(0), null, List.of(), 0, 0L, false, 0, 0f, Map.of(), null, null, List.of(), 0,
+                    null
                 );
             }
 
             public static Order unrecognizedStatus() {
                 return new Order(
                     0L, "", List.of(), List.of(), Map.of(), Status.UNRECOGNIZED, null, null, null, null,
-                    ByteString.EMPTY, null, List.of(), 0, 0L, false, 0, 0f, Map.of(), null, null, List.of(), 0, null
+                    ByteBuffer.allocate(0), null, List.of(), 0, 0L, false, 0, 0f, Map.of(), null, null, List.of(), 0,
+                    null
                 );
             }
         }

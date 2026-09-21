@@ -62,6 +62,7 @@
                     <protoc>${protobuf.version}</protoc>
                     <outputDescriptorFile>${project.build.directory}/generated/descriptors.pb</outputDescriptorFile>
                     <outputDescriptorIncludeImports>true</outputDescriptorIncludeImports>
+                    <embedSourcesInClassOutputs>false</embedSourcesInClassOutputs>
                 </configuration>
                 <executions>
                     <execution>

@@ -2,7 +2,6 @@ package io.github.hurelhuyag.protobuf;
 
 import com.google.protobuf.CodedInputStream;
 import com.google.protobuf.CodedOutputStream;
-import com.google.protobuf.InvalidProtocolBufferException;
 import io.github.hurelhuyag.protobuf.internal.EmbeddedSizes;
 import io.github.hurelhuyag.protobuf.internal.ProtoCodec;
 import io.github.hurelhuyag.protobuf.internal.TwoPassCodec;
@@ -11,9 +10,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
 
 /**
- * Entry point: looks up the generated codec for a record type and encodes/decodes with it.
+ * Entry point: looks up the generated codec for a record type and encodes/decodes with it. Malformed input fails
+ * with an {@link IOException} (a {@code com.google.protobuf.InvalidProtocolBufferException} underneath).
  * <p>
  * The codec for {@code com.acme.Order} is the generated class {@code com.acme.OrderProtoCodec}; for a nested
  * record {@code com.acme.Outer.Inner} it is {@code com.acme.Outer_InnerProtoCodec}. Lookups are cached per class.
@@ -53,38 +54,23 @@ public final class DeclarativeProtobuf {
         return (TwoPassCodec<T>) CODECS.get(type);
     }
 
-    public static <T> T decode(CodedInputStream in, Class<T> type) throws IOException {
-        T value = codec(type).decode(in);
-        in.checkLastTagWas(0);
-        return value;
+    public static <T> T decode(byte[] bytes, Class<T> type) throws IOException {
+        return decode(CodedInputStream.newInstance(bytes), type);
     }
 
-    public static <T> T decode(byte[] bytes, Class<T> type) throws InvalidProtocolBufferException {
-        try {
-            return decode(CodedInputStream.newInstance(bytes), type);
-        } catch (InvalidProtocolBufferException e) {
-            throw e;
-        } catch (IOException e) {
-            throw new InvalidProtocolBufferException(e);
-        }
+    /** Decodes the buffer's remaining bytes; the buffer's position is not moved. */
+    public static <T> T decode(ByteBuffer bytes, Class<T> type) throws IOException {
+        return decode(CodedInputStream.newInstance(bytes), type);
     }
 
     public static <T> T decode(InputStream in, Class<T> type) throws IOException {
         return decode(CodedInputStream.newInstance(in), type);
     }
 
-    @SuppressWarnings("unchecked")
-    public static <T> void encode(T value, CodedOutputStream out) throws IOException {
-        TwoPassCodec<T> codec = codec((Class<T>) value.getClass());
-        EmbeddedSizes sizes = new EmbeddedSizes();
-        codec.computeSize(value, sizes);
-        codec.encode(value, out, sizes.rewind());
-    }
-
-    public static <T> void encode(T value, OutputStream out) throws IOException {
-        CodedOutputStream coded = CodedOutputStream.newInstance(out);
-        encode(value, coded);
-        coded.flush();
+    private static <T> T decode(CodedInputStream in, Class<T> type) throws IOException {
+        T value = codec(type).decode(in);
+        in.checkLastTagWas(0);
+        return value;
     }
 
     @SuppressWarnings("unchecked")
@@ -102,5 +88,15 @@ public final class DeclarativeProtobuf {
             );
         }
         return bytes;
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <T> void encode(T value, OutputStream out) throws IOException {
+        TwoPassCodec<T> codec = codec((Class<T>) value.getClass());
+        EmbeddedSizes sizes = new EmbeddedSizes();
+        codec.computeSize(value, sizes);
+        CodedOutputStream coded = CodedOutputStream.newInstance(out);
+        codec.encode(value, coded, sizes.rewind());
+        coded.flush();
     }
 }

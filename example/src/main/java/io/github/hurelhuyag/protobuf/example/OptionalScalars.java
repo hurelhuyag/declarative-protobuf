@@ -1,8 +1,9 @@
 package io.github.hurelhuyag.protobuf.example;
 
-import com.google.protobuf.ByteString;
 import io.github.hurelhuyag.protobuf.Proto;
 import io.github.hurelhuyag.protobuf.ProtoMessage;
+
+import java.nio.ByteBuffer;
 
 /**
  * Binds to {@code example.OptionalScalars}: explicit presence, so boxed types. {@code null} means the field is
@@ -24,7 +25,7 @@ public record OptionalScalars(
     @Proto(12) Long sfixed64Value,
     @Proto(13) Boolean boolValue,
     @Proto(14) String stringValue,
-    @Proto(15) ByteString bytesValue,
+    @Proto(15) ByteBuffer bytesValue,
     @Proto(16) Color color
 ) {
 }

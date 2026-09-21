@@ -59,7 +59,7 @@ final class Binder {
         wellKnown("google.protobuf.BoolValue", "java.lang.Boolean", "BOOL_VALUE"),
         wellKnown("google.protobuf.StringValue", "java.lang.String", "STRING_VALUE"),
         Map.entry("google.protobuf.BytesValue", List.of(
-            new MessageBinding("com.google.protobuf.ByteString", "WellKnownCodecs.BYTES_VALUE", false),
+            new MessageBinding("java.nio.ByteBuffer", "WellKnownCodecs.BYTE_BUFFER_VALUE", false),
             new MessageBinding("byte[]", "WellKnownCodecs.BYTE_ARRAY_VALUE", false)
         ))
     );
@@ -157,7 +157,7 @@ final class Binder {
         return switch (field.getJavaType()) {
             case INT, LONG, FLOAT, DOUBLE, BOOLEAN -> isSame(wire, Scalar.of(field.getType()).boxedType());
             case STRING -> isSame(wire, "java.lang.String");
-            case BYTE_STRING -> isByteArray(wire) || isSame(wire, "com.google.protobuf.ByteString");
+            case BYTE_STRING -> isByteArray(wire) || isSame(wire, "java.nio.ByteBuffer");
             case ENUM -> isSame(wire, "java.lang.Integer");
             case MESSAGE -> {
                 String expected = field.getMessageType().getFullName();
@@ -452,8 +452,8 @@ final class Binder {
             }
             case BYTE_STRING -> {
                 if (isByteArray(type)) return Scalar.BYTE_ARRAY;
-                if (isSame(type, "com.google.protobuf.ByteString")) return Scalar.BYTES;
-                return mismatch(at, field, subject, "'byte[]' or 'com.google.protobuf.ByteString'");
+                if (isSame(type, "java.nio.ByteBuffer")) return Scalar.BYTE_BUFFER;
+                return mismatch(at, field, subject, "'byte[]' or 'java.nio.ByteBuffer'");
             }
             case ENUM -> {
                 if (boxed ? isSame(type, "java.lang.Integer") : type.getKind() == TypeKind.INT) {

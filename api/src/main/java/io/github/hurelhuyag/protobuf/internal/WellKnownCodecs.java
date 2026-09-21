@@ -1,10 +1,10 @@
 package io.github.hurelhuyag.protobuf.internal;
 
-import com.google.protobuf.ByteString;
 import com.google.protobuf.CodedInputStream;
 import com.google.protobuf.CodedOutputStream;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
 
@@ -271,25 +271,25 @@ public final class WellKnownCodecs {
         }
     };
 
-    public static final ProtoCodec<ByteString> BYTES_VALUE = new ProtoCodec<>() {
+    public static final ProtoCodec<ByteBuffer> BYTE_BUFFER_VALUE = new ProtoCodec<>() {
         @Override
-        public ByteString decode(CodedInputStream in) throws IOException {
-            ByteString v = ByteString.EMPTY;
+        public ByteBuffer decode(CodedInputStream in) throws IOException {
+            ByteBuffer v = Wire.EMPTY_BUFFER;
             int tag;
             while ((tag = in.readTag()) != 0) {
-                if (tag == 10) v = in.readBytes(); else in.skipField(tag);
+                if (tag == 10) v = Wire.readByteBuffer(in); else in.skipField(tag);
             }
             return v;
         }
 
         @Override
-        public void encode(ByteString value, CodedOutputStream out) throws IOException {
-            if (!value.isEmpty()) out.writeBytes(1, value);
+        public void encode(ByteBuffer value, CodedOutputStream out) throws IOException {
+            if (value.hasRemaining()) Wire.writeByteBuffer(out, 1, value);
         }
 
         @Override
-        public int computeSize(ByteString value) {
-            return value.isEmpty() ? 0 : CodedOutputStream.computeBytesSize(1, value);
+        public int computeSize(ByteBuffer value) {
+            return value.hasRemaining() ? Wire.computeByteBufferSize(1, value) : 0;
         }
     };
 

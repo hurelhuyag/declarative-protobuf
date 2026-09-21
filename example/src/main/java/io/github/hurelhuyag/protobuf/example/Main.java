@@ -1,9 +1,10 @@
 package io.github.hurelhuyag.protobuf.example;
 
-import com.google.protobuf.ByteString;
 import io.github.hurelhuyag.protobuf.DeclarativeProtobuf;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
@@ -33,10 +34,10 @@ public final class Main {
 
     static Everything sample() {
         Scalars scalars = new Scalars(
-            1.5, 2.5f, -3, -4L, -1, -1L, -7, -8L, 9, 10L, -11, -12L, true, "text", ByteString.copyFromUtf8("raw")
+            1.5, 2.5f, -3, -4L, -1, -1L, -7, -8L, 9, 10L, -11, -12L, true, "text", bytes("raw")
         );
         OptionalScalars optionals = new OptionalScalars(
-            0.0, null, 0, null, 0, null, 0, null, 0, null, 0, null, false, "", ByteString.EMPTY, Color.UNSPECIFIED
+            0.0, null, 0, null, 0, null, 0, null, 0, null, 0, null, false, "", ByteBuffer.allocate(0), Color.UNSPECIFIED
         );
         Point point = new Point(3, 4);
         return new Everything(
@@ -45,16 +46,20 @@ public final class Main {
             new Outer(new Outer.Inner("in")), new Outer.Inner("direct"),
             Color.GREEN, 42,
             List.of(1, -2, 300), List.of(1L, -1L), List.of(0.5, -0.5), List.of(true, false),
-            List.of(Color.RED, Color.BLUE), List.of("a", "b"), List.of(ByteString.copyFromUtf8("x")), List.of(point),
+            List.of(Color.RED, Color.BLUE), List.of("a", "b"), List.of(bytes("x")), List.of(point),
             Map.of("k", 1), Map.of(7L, point), Map.of("red", Color.RED), Map.of(true, "yes"),
-            Map.of(1, ByteString.copyFromUtf8("b")), Map.of(),
+            Map.of(1, bytes("b")), Map.of(),
             null, "label", null, null,
             Instant.parse("2026-09-21T12:00:00Z"), Duration.ofMinutes(5),
-            1.0, 2.0f, 3L, 4L, 5, 6, true, "s", ByteString.copyFromUtf8("b"),
+            1.0, 2.0f, 3L, 4L, 5, 6, true, "s", bytes("b"),
             List.of(Instant.EPOCH, Instant.ofEpochSecond(1)), Map.of("d", Duration.ofSeconds(-1, -500_000_000)),
             UUID.fromString("123e4567-e89b-12d3-a456-426614174000"),
             List.of(UUID.fromString("00000000-0000-0000-0000-000000000001"))
         );
+    }
+
+    static ByteBuffer bytes(String text) {
+        return ByteBuffer.wrap(text.getBytes(StandardCharsets.UTF_8));
     }
 
     private Main() {

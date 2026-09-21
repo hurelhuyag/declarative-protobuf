@@ -4,8 +4,10 @@
 
 Protobuf codecs for Java records, generated at compile time. You declare a record, bind each component to a
 field number, and the annotation processor validates the declaration against your `.proto` schema and generates a
-straight-line encoder/decoder built on `CodedInputStream`/`CodedOutputStream`. The only runtime dependency is
-`protobuf-java`; no descriptors, reflection or builders are involved at runtime.
+straight-line encoder/decoder built on protobuf's `CodedInputStream`/`CodedOutputStream`. The only runtime
+dependency is `protobuf-javalite`, and it stays behind the API: your records and calls use JDK types only —
+`ByteBuffer` for `bytes`, `Instant` for `Timestamp`, `IOException` for malformed input — never
+`com.google.protobuf.*`. No descriptors, reflection or builders are involved at runtime.
 
 ```java
 @ProtoMessage("acme.orders.Order")
@@ -16,7 +18,8 @@ public record Order(
     @Proto(7) Map<String, Integer> attributes,
     @Proto(9) Status status,
     @Proto(10) Instant createdAt,          // google.protobuf.Timestamp
-    @Proto(11) Integer discount            // optional int32
+    @Proto(11) Integer discount,           // optional int32
+    @Proto(12) UUID requestId              // your own type, via a registered ProtoConverter
 ) {}
 
 @ProtoEnum("acme.orders.Status")
@@ -128,17 +131,17 @@ The `example` module is the reference; in short:
 | `int64` `sint64` `uint64` `fixed64` `sfixed64` | `long` | `Long` |
 | `float` / `double` / `bool` | `float` / `double` / `boolean` | `Float` / `Double` / `Boolean` |
 | `string` | `String` | `String` |
-| `bytes` | `byte[]` or `ByteString` | same |
+| `bytes` | `ByteBuffer` (read-only on decode; position→limit on encode) or `byte[]` | same |
 | enum | `@ProtoEnum` enum, or `int` for the raw number | same, boxed |
 | message | `@ProtoMessage` record (always nullable = absent) | same |
 | `repeated T` | `List<T>` (boxed element type) | — |
 | `map<K, V>` | `Map<K, V>` | — |
 | `google.protobuf.Timestamp` / `Duration` | `Instant` / `java.time.Duration` | same |
-| `google.protobuf.*Value` wrappers | the boxed Java type (`Integer`, `String`, `ByteString`/`byte[]`, …) | same |
+| `google.protobuf.*Value` wrappers | the boxed Java type (`Integer`, `String`, `ByteBuffer`/`byte[]`, …) | same |
 
 The presence column is enforced: `optional int32` as `int` is rejected (absent and 0 would collide), and plain
 `int32` as `Integer` is rejected too (`null` has no wire representation). For reference types with implicit
-presence (`String`, `ByteString`, `byte[]`, enums) a `null` encodes like the default value, and absent decodes to
+presence (`String`, `ByteBuffer`, `byte[]`, enums) a `null` encodes like the default value, and absent decodes to
 `""` / empty / the zero constant. Absent repeated and map fields decode to `List.of()` / `Map.of()`.
 
 Any `google.protobuf.*` message can alternatively be bound to your own `@ProtoMessage` record.
@@ -152,20 +155,28 @@ generated codec still does the wire work. Register the class the `ServiceLoader`
 `T` uses it — singular, list elements, map keys and values — wherever `W` fits the field. No annotation on the
 field.
 
+```proto
+message Uuid { fixed64 msb = 1; fixed64 lsb = 2; }   // 20 bytes on the wire; a string UUID is 38 plus parsing
+```
+
 ```java
-public final class UuidCodec implements ProtoConverter<String, UUID> {
-    public UUID fromWire(String wire) { return wire.isEmpty() ? null : UUID.fromString(wire); }
-    public String toWire(UUID value) { return value.toString(); }
+@ProtoMessage public record Uuid(@Proto(1) long msb, @Proto(2) long lsb) {}
+
+public final class UuidConverter implements ProtoConverter<Uuid, UUID> {
+    public UUID fromWire(Uuid wire) { return new UUID(wire.msb(), wire.lsb()); }
+    public Uuid toWire(UUID value) { return new Uuid(value.getMostSignificantBits(), value.getLeastSignificantBits()); }
 }
 
-public final class MoneyConverter implements ProtoConverter<MoneyRecord, Money> { ... }   // message field
+@Proto(40) UUID requestId          // bound to a `Uuid` field; no annotation names the converter
 ```
 
 ```
 # META-INF/services/io.github.hurelhuyag.protobuf.ProtoConverter
-com.acme.UuidCodec
-com.acme.MoneyConverter
+com.acme.UuidConverter
 ```
+
+The same shape works for scalars — `ProtoConverter<Long, Instant>` for an `int64` holding epoch millis,
+`ProtoConverter<String, Locale>` for a language tag — with the boxed wire type as `W`.
 
 The processor reads service files from two places: jars on the **annotation processor path**, through its own
 class loader (so a converter library is listed both as a dependency and under `<annotationProcessorPaths>`, the
@@ -175,7 +186,7 @@ exposes only the first such file it finds — in a Maven build the module being 
 `fromWire` sees the wire default (`""`, `0`, …) for an absent implicit-presence scalar and may return `null`; a
 `null` component is not written, and neither is one whose `toWire` result is the default. Absent message fields
 stay `null` without the converter being called. Because matching is by fit, `ProtoConverter<String, UUID>` and
-`ProtoConverter<ByteString, UUID>` can both be registered; two converters fitting the same component is a compile
+`ProtoConverter<ByteBuffer, UUID>` can both be registered; two converters fitting the same component is a compile
 error, as is a registered class that is not on the compile classpath, does not implement `ProtoConverter`, or
 lacks an accessible no-arg constructor.
 
@@ -186,7 +197,10 @@ lacks an accessible no-arg constructor.
 - oneof: members are ordinary nullable components. Decoding keeps the last one seen on the wire; encoding a value
   with more than one member non-null throws `IllegalArgumentException`.
 - Map entries are written with both key and value; `null` map values are written as absent.
-- Malformed input throws `InvalidProtocolBufferException`.
+- Malformed input throws `IOException`. `ByteBuffer` components decode as read-only buffers over a private copy and
+  compare by content, so record `equals` works; `byte[]` components compare by reference, as arrays do.
+- `DeclarativeProtobuf` takes and returns `byte[]`, `ByteBuffer`, `InputStream`/`OutputStream` — what a Kafka
+  `Serializer`/`Deserializer` or an HTTP body hands you.
 
 ## Performance
 
@@ -227,8 +241,9 @@ number is recorded.
 
 ## Runtime dependency: protobuf-javalite by default
 
-The runtime and the generated code use only `CodedInputStream`, `CodedOutputStream`, `ByteString`, `WireFormat`
-and `InvalidProtocolBufferException`. Those classes are identical in `protobuf-java` and `protobuf-javalite`
+The runtime and the generated code use only `CodedInputStream`, `CodedOutputStream`, `WireFormat` and
+`InvalidProtocolBufferException`, none of them visible from application code. Those classes are identical in
+`protobuf-java` and `protobuf-javalite`
 (javalite drops the reflection layer: `Descriptors`, `DynamicMessage`, `TextFormat`), so the api depends on
 `protobuf-javalite` — 1.0 MB instead of 1.8 MB. Full `protobuf-java` is needed only on the annotation processor
 path, which never reaches the runtime classpath.

@@ -8,7 +8,6 @@ import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Duration;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.Int32Value;
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Timestamp;
 import com.google.protobuf.UnknownFieldSet;
 import com.google.protobuf.WireFormat;
@@ -19,6 +18,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -149,6 +150,39 @@ class GeneratedCodecTest {
         assertArrayEquals(expectedSample().toByteArray(), out.toByteArray());
         ByteArrayInputStream in = new ByteArrayInputStream(out.toByteArray());
         assertEquals(order, DeclarativeProtobuf.decode(in, orderClass));
+
+        // ByteBuffer input: decodes the remaining bytes, leaves the position alone
+        byte[] padded = new byte[out.size() + 5];
+        System.arraycopy(out.toByteArray(), 0, padded, 5, out.size());
+        ByteBuffer buffer = ByteBuffer.wrap(padded).position(5);
+        assertEquals(order, DeclarativeProtobuf.decode(buffer, orderClass));
+        assertEquals(5, buffer.position());
+    }
+
+    /** bytes as ByteBuffer: read-only on decode, content equality, encode from position to limit. */
+    @Test
+    void byteBufferSemantics() throws Exception {
+        Object decoded = DeclarativeProtobuf.decode(expectedSample().toByteArray(), orderClass);
+        ByteBuffer blob = (ByteBuffer) component(decoded, "blob");
+        assertTrue(blob.isReadOnly());
+        assertEquals(ByteBuffer.wrap("xyz".getBytes()), blob);
+
+        ByteBuffer sliced = ByteBuffer.wrap("__xyz__".getBytes()).position(2).limit(5);
+        byte[] bytes = DeclarativeProtobuf.encode(sample("order").getClass().getConstructors()[0].newInstance(
+            replaceBlob(sample("order"), sliced)
+        ));
+        assertEquals(2, sliced.position());
+        Object wire = DynamicMessage.parseFrom(ORDER, bytes).getField(field(ORDER, "blob"));
+        assertEquals(ByteString.copyFromUtf8("xyz"), wire);
+    }
+
+    private static Object[] replaceBlob(Object order, ByteBuffer blob) throws Exception {
+        var components = order.getClass().getRecordComponents();
+        Object[] args = new Object[components.length];
+        for (int i = 0; i < components.length; i++) {
+            args[i] = components[i].getName().equals("blob") ? blob : components[i].getAccessor().invoke(order);
+        }
+        return args;
     }
 
     @Test
@@ -282,6 +316,6 @@ class GeneratedCodecTest {
     void truncatedInputFails() throws Exception {
         byte[] bytes = expectedSample().toByteArray();
         byte[] truncated = java.util.Arrays.copyOf(bytes, bytes.length - 3);
-        assertThrows(InvalidProtocolBufferException.class, () -> DeclarativeProtobuf.decode(truncated, orderClass));
+        assertThrows(IOException.class, () -> DeclarativeProtobuf.decode(truncated, orderClass));
     }
 }

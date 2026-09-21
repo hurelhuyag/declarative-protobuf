@@ -21,7 +21,7 @@ enum Scalar implements ValueBinding {
     DOUBLE("Double", TypeKind.DOUBLE, WireFormat.WIRETYPE_FIXED64),
     BOOL("Bool", TypeKind.BOOLEAN, WireFormat.WIRETYPE_VARINT),
     STRING("String", null, WireFormat.WIRETYPE_LENGTH_DELIMITED),
-    BYTES("Bytes", null, WireFormat.WIRETYPE_LENGTH_DELIMITED),
+    BYTE_BUFFER("ByteBuffer", null, WireFormat.WIRETYPE_LENGTH_DELIMITED),
     BYTE_ARRAY("ByteArray", null, WireFormat.WIRETYPE_LENGTH_DELIMITED),
     /** An enum field bound to a plain {@code int}: the raw value number. */
     ENUM_NUMBER("Enum", TypeKind.INT, WireFormat.WIRETYPE_VARINT);
@@ -53,7 +53,7 @@ enum Scalar implements ValueBinding {
             case DOUBLE -> DOUBLE;
             case BOOL -> BOOL;
             case STRING -> STRING;
-            case BYTES -> BYTES;
+            case BYTES -> BYTE_BUFFER;
             case ENUM -> ENUM_NUMBER;
             case MESSAGE, GROUP -> throw new IllegalArgumentException("not a scalar: " + type);
         };
@@ -63,7 +63,7 @@ enum Scalar implements ValueBinding {
     public String boxedType() {
         return switch (this) {
             case STRING -> "java.lang.String";
-            case BYTES -> "com.google.protobuf.ByteString";
+            case BYTE_BUFFER -> "java.nio.ByteBuffer";
             case BYTE_ARRAY -> "byte[]";
             default -> switch (primitive) {
                 case INT -> "java.lang.Integer";
@@ -85,7 +85,7 @@ enum Scalar implements ValueBinding {
     public String defaultValue() {
         return switch (this) {
             case STRING -> "\"\"";
-            case BYTES -> "com.google.protobuf.ByteString.EMPTY";
+            case BYTE_BUFFER -> "Wire.EMPTY_BUFFER";
             case BYTE_ARRAY -> "new byte[0]";
             case BOOL -> "false";
             case FLOAT -> "0F";
@@ -97,7 +97,8 @@ enum Scalar implements ValueBinding {
     @Override
     public String isSet(String x) {
         return switch (this) {
-            case STRING, BYTES -> x + " != null && !" + x + ".isEmpty()";
+            case STRING -> x + " != null && !" + x + ".isEmpty()";
+            case BYTE_BUFFER -> x + " != null && " + x + ".hasRemaining()";
             case BYTE_ARRAY -> x + " != null && " + x + ".length != 0";
             case BOOL -> x;
             case FLOAT -> x + " != 0F";
@@ -113,16 +114,22 @@ enum Scalar implements ValueBinding {
 
     @Override
     public String read() {
-        return this == STRING ? "in.readStringRequireUtf8()" : "in.read" + method + "()";
+        return switch (this) {
+            case STRING -> "in.readStringRequireUtf8()";
+            case BYTE_BUFFER -> "Wire.readByteBuffer(in)";
+            default -> "in.read" + method + "()";
+        };
     }
 
     @Override
     public String write(int fieldNumber, String x) {
+        if (this == BYTE_BUFFER) return "Wire.writeByteBuffer(out, " + fieldNumber + ", " + x + ")";
         return "out.write" + method + "(" + fieldNumber + ", " + x + ")";
     }
 
     @Override
     public String size(int fieldNumber, String x) {
+        if (this == BYTE_BUFFER) return "Wire.computeByteBufferSize(" + fieldNumber + ", " + x + ")";
         return "CodedOutputStream.compute" + method + "Size(" + fieldNumber + ", " + x + ")";
     }
 

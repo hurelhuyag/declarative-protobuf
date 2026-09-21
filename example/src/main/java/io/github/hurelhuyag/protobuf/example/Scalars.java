@@ -1,15 +1,16 @@
 package io.github.hurelhuyag.protobuf.example;
 
-import com.google.protobuf.ByteString;
 import io.github.hurelhuyag.protobuf.Proto;
 import io.github.hurelhuyag.protobuf.ProtoMessage;
 
+import java.nio.ByteBuffer;
+
 /**
  * Binds to {@code example.Scalars}: implicit presence, so primitives. Java has no unsigned types; uint32/uint64
- * arrive as their two's-complement bit patterns. A {@code null} String or ByteString encodes like the empty default.
+ * arrive as their two's-complement bit patterns. A {@code null} String or ByteBuffer encodes like the empty default.
  * <p>
- * {@code bytes} may also be declared as {@code byte[]}; ByteString is used here because records compare arrays by
- * reference, which would make {@code equals} useless for round-trip checks.
+ * {@code bytes} decodes to a read-only {@link ByteBuffer} and encodes the buffer's remaining bytes; buffers compare
+ * by content, so record {@code equals} works. {@code byte[]} is accepted too, but arrays compare by reference.
  */
 @ProtoMessage("example.Scalars")
 public record Scalars(
@@ -27,6 +28,6 @@ public record Scalars(
     @Proto(12) long sfixed64Value,
     @Proto(13) boolean boolValue,
     @Proto(14) String stringValue,
-    @Proto(15) ByteString bytesValue
+    @Proto(15) ByteBuffer bytesValue
 ) {
 }

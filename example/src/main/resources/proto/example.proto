@@ -32,7 +32,7 @@ message Scalars {
   sfixed64 sfixed64_value = 12; // long
   bool bool_value = 13;         // boolean
   string string_value = 14;     // String
-  bytes bytes_value = 15;       // byte[] or com.google.protobuf.ByteString
+  bytes bytes_value = 15;       // java.nio.ByteBuffer (read-only on decode) or byte[]
 }
 
 // The same scalars with explicit presence: Java boxed types, null = absent.
@@ -58,6 +58,13 @@ message OptionalScalars {
 message Point {
   int32 x = 1;
   int32 y = 2;
+}
+
+// A UUID as its two 64-bit halves: 20 bytes on the wire and no hex formatting, where a string costs 38 bytes
+// plus parsing. Java sees java.util.UUID through a ProtoConverter<Uuid, UUID> (see UuidConverter).
+message Uuid {
+  fixed64 msb = 1;
+  fixed64 lsb = 2;
 }
 
 // A recursive message.
@@ -128,7 +135,7 @@ message Everything {
   repeated google.protobuf.Timestamp timestamps = 38;
   map<string, google.protobuf.Duration> durations = 39;
 
-  // any scalar can be surfaced as a Java type of your own through @Proto(codec = ...), here string as UUID
-  string request_id = 40;
-  repeated string related_ids = 41;
+  // a message surfaced as a Java type of your own through a registered ProtoConverter
+  Uuid request_id = 40;
+  repeated Uuid related_ids = 41;
 }

@@ -14,6 +14,7 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
@@ -48,7 +49,7 @@ public class CodecBenchmark {
     int coupons;
 
     @Setup
-    public void setup() throws InvalidProtocolBufferException {
+    public void setup() throws IOException {
         boolean large = size.equals("large");
         lines = large ? 20 : 1;
         attributes = large ? 10 : 0;
@@ -94,7 +95,7 @@ public class CodecBenchmark {
     }
 
     @Benchmark
-    public Order decode_declarative() throws InvalidProtocolBufferException {
+    public Order decode_declarative() throws IOException {
         return DeclarativeProtobuf.decode(bytes, Order.class);
     }
 

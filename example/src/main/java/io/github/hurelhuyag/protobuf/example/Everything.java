@@ -1,9 +1,9 @@
 package io.github.hurelhuyag.protobuf.example;
 
-import com.google.protobuf.ByteString;
 import io.github.hurelhuyag.protobuf.Proto;
 import io.github.hurelhuyag.protobuf.ProtoMessage;
 
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -35,7 +35,7 @@ public record Everything(
     @Proto(12) List<Boolean> bools,
     @Proto(13) List<Color> colors,
     @Proto(14) List<String> strings,
-    @Proto(15) List<ByteString> blobs,
+    @Proto(15) List<ByteBuffer> blobs,
     @Proto(16) List<Point> points,
 
     // maps
@@ -43,7 +43,7 @@ public record Everything(
     @Proto(18) Map<Long, Point> pointsById,
     @Proto(19) Map<String, Color> colorsByName,
     @Proto(20) Map<Boolean, String> byFlag,
-    @Proto(21) Map<Integer, ByteString> blobsById,
+    @Proto(21) Map<Integer, ByteBuffer> blobsById,
     @Proto(22) Map<String, Everything> nested,
 
     // oneof shape: members have presence, so boxed / nullable
@@ -63,11 +63,11 @@ public record Everything(
     @Proto(34) Integer maybeUnsignedInt,
     @Proto(35) Boolean maybeBool,
     @Proto(36) String maybeString,
-    @Proto(37) ByteString maybeBytes,
+    @Proto(37) ByteBuffer maybeBytes,
     @Proto(38) List<Instant> timestamps,
     @Proto(39) Map<String, Duration> durations,
 
-    // custom Java types: UuidCodec is registered in META-INF/services, so every UUID on a string field uses it
+    // custom Java types: UuidConverter is registered in META-INF/services, so every UUID on a Uuid field uses it
     @Proto(40) UUID requestId,
     @Proto(41) List<UUID> relatedIds
 ) {
