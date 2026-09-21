@@ -1,0 +1,44 @@
+// A typical event-shaped message: a few scalars, an embedded message, a repeated message, a map, a timestamp.
+syntax = "proto3";
+
+package bench;
+
+import "google/protobuf/timestamp.proto";
+
+option java_package = "io.github.hurelhuyag.protobuf.benchmark.proto";
+option java_multiple_files = true;
+
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  NEW = 1;
+  PAID = 2;
+  SHIPPED = 3;
+}
+
+message Address {
+  string street = 1;
+  string city = 2;
+  string zip = 3;
+  string country = 4;
+}
+
+message Line {
+  string sku = 1;
+  int32 quantity = 2;
+  int64 unit_price_cents = 3;
+  repeated string tags = 4;
+}
+
+message Order {
+  int64 id = 1;
+  string customer_id = 2;
+  Status status = 3;
+  google.protobuf.Timestamp created_at = 4;
+  Address shipping = 5;
+  repeated Line lines = 6;
+  map<string, string> attributes = 7;
+  optional int32 discount_percent = 8;
+  bool gift = 9;
+  double weight_kg = 10;
+  repeated int64 coupon_ids = 11;
+}

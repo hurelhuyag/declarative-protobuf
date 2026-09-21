@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & test (JDK ${{ matrix.java }})
+    runs-on: ubuntu-latest
+    # 17 is the release target, 21/25 the current LTS lines, 26 the latest GA; 27 runs on Temurin early-access
+    # builds until Temurin publishes its GA and may not fail the workflow. Promote it by dropping the "-ea".
+    continue-on-error: ${{ matrix.experimental || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [17, 21, 25, 26]
+        experimental: [false]
+        include:
+          - java: 27-ea
+            experimental: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+
+      # api + processor + example (real protoc via protobuf-maven-plugin) + benchmark wire-compatibility tests
+      - name: Build and test
+        run: mvn -B --no-transfer-progress verify
+
+      - name: Run the example
+        run: >
+          mvn -B -q --no-transfer-progress -pl example
+          org.codehaus.mojo:exec-maven-plugin:3.5.0:java
+          -Dexec.mainClass=io.github.hurelhuyag.protobuf.example.Main
+
+      - name: Show generated codec for the example
+        run: sed -n '1,60p' example/target/generated-sources/annotations/io/github/hurelhuyag/protobuf/example/PointProtoCodec.java
+
+      - name: Surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports-jdk${{ matrix.java }}
+          path: '**/target/surefire-reports/*.xml'
+          if-no-files-found: ignore
+
+  # A short JMH run against protoc-generated protobuf-java, so the numbers in the README can be reproduced.
+  # CI runners are noisy and shared; treat these as a sanity check, not as the published figures.
+  benchmark:
+    name: Benchmark (quick)
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: maven
+
+      - name: Build benchmark jar
+        run: mvn -B --no-transfer-progress -DskipTests package
+
+      - name: Run JMH
+        run: >
+          java -jar benchmark/target/benchmarks.jar
+          -f 1 -wi 2 -w 1 -i 3 -r 1 -prof gc
+          -rf json -rff benchmark/target/results.json
+          | tee benchmark/target/run.log
+
+      - name: Summary
+        run: |
+          {
+            echo '## JMH (quick run, ubuntu-latest, JDK 25)'
+            echo
+            echo '| Benchmark | size | ns/op | B/op |'
+            echo '|---|---|---:|---:|'
+            python3 - <<'PY'
+          import json
+          rows = {}
+          for r in json.load(open('benchmark/target/results.json')):
+              key = (r['benchmark'].split('.')[-1], r['params']['size'])
+              rows.setdefault(key, {})['ns'] = r['primaryMetric']['score']
+              alloc = r['secondaryMetrics'].get('gc.alloc.rate.norm')
+              if alloc: rows[key]['b'] = alloc['score']
+          for (name, size), v in sorted(rows.items()):
+              print(f"| {name} | {size} | {v['ns']:,.0f} | {v.get('b', 0):,.0f} |")
+          PY
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jmh-results
+          path: |
+            benchmark/target/results.json
+            benchmark/target/run.log

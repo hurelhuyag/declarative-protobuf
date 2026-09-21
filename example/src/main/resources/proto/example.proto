@@ -1,0 +1,134 @@
+// Every proto3 construct declarative-protobuf supports, in one schema.
+// The Java records in io.github.hurelhuyag.protobuf.example bind to these messages.
+syntax = "proto3";
+
+package example;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+// Java: enum Color { @Proto(0) UNSPECIFIED, @Proto(1) RED, ..., @ProtoUnrecognized UNRECOGNIZED }
+enum Color {
+  COLOR_UNSPECIFIED = 0;
+  RED = 1;
+  GREEN = 2;
+  BLUE = 3;
+}
+
+// All fifteen scalar types with implicit presence: Java primitives / String / bytes.
+message Scalars {
+  double double_value = 1;      // double
+  float float_value = 2;        // float
+  int32 int32_value = 3;        // int
+  int64 int64_value = 4;        // long
+  uint32 uint32_value = 5;      // int   (two's complement; use Integer.toUnsignedLong to read as unsigned)
+  uint64 uint64_value = 6;      // long  (two's complement; use Long.toUnsignedString to print)
+  sint32 sint32_value = 7;      // int   (zigzag on the wire, chosen by the schema, invisible to Java)
+  sint64 sint64_value = 8;      // long
+  fixed32 fixed32_value = 9;    // int
+  fixed64 fixed64_value = 10;   // long
+  sfixed32 sfixed32_value = 11; // int
+  sfixed64 sfixed64_value = 12; // long
+  bool bool_value = 13;         // boolean
+  string string_value = 14;     // String
+  bytes bytes_value = 15;       // byte[] or com.google.protobuf.ByteString
+}
+
+// The same scalars with explicit presence: Java boxed types, null = absent.
+message OptionalScalars {
+  optional double double_value = 1;
+  optional float float_value = 2;
+  optional int32 int32_value = 3;
+  optional int64 int64_value = 4;
+  optional uint32 uint32_value = 5;
+  optional uint64 uint64_value = 6;
+  optional sint32 sint32_value = 7;
+  optional sint64 sint64_value = 8;
+  optional fixed32 fixed32_value = 9;
+  optional fixed64 fixed64_value = 10;
+  optional sfixed32 sfixed32_value = 11;
+  optional sfixed64 sfixed64_value = 12;
+  optional bool bool_value = 13;
+  optional string string_value = 14;
+  optional bytes bytes_value = 15;
+  optional Color color = 16;
+}
+
+message Point {
+  int32 x = 1;
+  int32 y = 2;
+}
+
+// A recursive message.
+message Tree {
+  string name = 1;
+  repeated Tree children = 2;
+}
+
+// A nested message type: Java record Outer with a nested record Outer.Inner.
+message Outer {
+  message Inner {
+    string id = 1;
+  }
+  Inner inner = 1;
+}
+
+message Everything {
+  // embedded messages: always nullable in Java, null = absent
+  Scalars scalars = 1;
+  OptionalScalars optionals = 2;
+  Point point = 3;
+  Tree tree = 4;
+  Outer outer = 5;
+  Outer.Inner inner = 6;
+
+  // enums: as a @ProtoEnum Java enum, or as int for the raw number
+  Color color = 7;
+  Color raw_color = 8;
+
+  // repeated: List<E>; numeric elements are packed on the wire
+  repeated int32 ints = 9;
+  repeated sfixed64 fixed_longs = 10;
+  repeated double doubles = 11;
+  repeated bool bools = 12;
+  repeated Color colors = 13;
+  repeated string strings = 14;
+  repeated bytes blobs = 15;
+  repeated Point points = 16;
+
+  // maps: Map<K, V>, any integral/bool/string key, any value type
+  map<string, int32> counts = 17;
+  map<int64, Point> points_by_id = 18;
+  map<string, Color> colors_by_name = 19;
+  map<bool, string> by_flag = 20;
+  map<uint32, bytes> blobs_by_id = 21;
+  map<string, Everything> nested = 22;
+
+  // oneof: each member is a nullable Java component, at most one non-null
+  oneof shape {
+    Point circle_center = 23;
+    string label = 24;
+    int32 radius = 25;
+    Color tint = 26;
+  }
+
+  // well-known types map to java.time and boxed types without any record of your own
+  google.protobuf.Timestamp created_at = 27;
+  google.protobuf.Duration ttl = 28;
+  google.protobuf.DoubleValue maybe_double = 29;
+  google.protobuf.FloatValue maybe_float = 30;
+  google.protobuf.Int64Value maybe_long = 31;
+  google.protobuf.UInt64Value maybe_unsigned_long = 32;
+  google.protobuf.Int32Value maybe_int = 33;
+  google.protobuf.UInt32Value maybe_unsigned_int = 34;
+  google.protobuf.BoolValue maybe_bool = 35;
+  google.protobuf.StringValue maybe_string = 36;
+  google.protobuf.BytesValue maybe_bytes = 37;
+  repeated google.protobuf.Timestamp timestamps = 38;
+  map<string, google.protobuf.Duration> durations = 39;
+
+  // any scalar can be surfaced as a Java type of your own through @Proto(codec = ...), here string as UUID
+  string request_id = 40;
+  repeated string related_ids = 41;
+}

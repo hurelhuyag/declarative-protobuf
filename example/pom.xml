@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.hurelhuyag</groupId>
+        <artifactId>declarative-protobuf</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>declarative-protobuf-example</artifactId>
+    <name>declarative-protobuf-example</name>
+    <description>
+        How to use declarative-protobuf from a consumer project: a .proto with every data type, the matching
+        records, and the Maven wiring that turns the .proto into a descriptor set and runs the processor.
+    </description>
+
+    <dependencies>
+        <!-- 1. the runtime: annotations + DeclarativeProtobuf facade (brings protobuf-javalite transitively) -->
+        <dependency>
+            <groupId>io.github.hurelhuyag</groupId>
+            <artifactId>declarative-protobuf-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- 2. compile src/main/resources/proto/*.proto into a FileDescriptorSet (no Java classes generated) -->
+            <plugin>
+                <groupId>io.github.ascopes</groupId>
+                <artifactId>protobuf-maven-plugin</artifactId>
+                <version>5.1.8</version>
+                <configuration>
+                    <protoc>${protobuf.version}</protoc>
+                    <javaEnabled>false</javaEnabled>
+                    <sourceDirectories>
+                        <sourceDirectory>${project.basedir}/src/main/resources/proto</sourceDirectory>
+                    </sourceDirectories>
+                    <outputDescriptorFile>${project.build.directory}/generated/descriptors.pb</outputDescriptorFile>
+                    <outputDescriptorIncludeImports>true</outputDescriptorIncludeImports>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- 3. run the annotation processor against that descriptor set -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>io.github.hurelhuyag</groupId>
+                            <artifactId>declarative-protobuf-processor</artifactId>
+                            <version>${project.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                    <compilerArgs>
+                        <arg>-Adeclarative.protobuf.descriptors=${project.build.directory}/generated/descriptors.pb</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
