@@ -111,6 +111,65 @@ The `example` module is the reference; in short:
 
    Several descriptor sets may be given, separated by the platform path separator.
 
+## Gradle wiring
+
+Verified with Gradle 9.7 on JDK 25 and the `com.google.protobuf` plugin 0.9.5 (Gradle 8.x itself needs JDK ≤ 24
+to run). `build.gradle.kts`:
+
+```kotlin
+plugins {
+    java
+    id("com.google.protobuf") version "0.9.5"
+}
+
+dependencies {
+    implementation("io.github.hurelhuyag:declarative-protobuf-api:${version}")
+    annotationProcessor("io.github.hurelhuyag:declarative-protobuf-processor:${version}")
+}
+
+sourceSets.main { proto.srcDir("src/main/resources/proto") }        // if the .proto files live under resources
+
+val descriptors = layout.buildDirectory.file("generated/descriptors.pb")
+
+protobuf {
+    protoc { artifact = "com.google.protobuf:protoc:4.35.1" }
+    generateProtoTasks {
+        all().forEach { task ->
+            task.builtins.removeIf { it.name == "java" }           // descriptor set only, no protoc Java classes
+            task.generateDescriptorSet = true
+            task.descriptorSetOptions.includeImports = true
+            task.descriptorSetOptions.path = descriptors.get().asFile.path
+        }
+    }
+}
+
+tasks.compileJava {
+    dependsOn("generateProto")
+    inputs.file(descriptors)
+    options.compilerArgs.add("-Adeclarative.protobuf.descriptors=${descriptors.get().asFile}")
+    classpath += files(sourceSets.main.get().resources.srcDirs)
+}
+```
+
+The last three lines each cover something Gradle does differently from Maven:
+
+- **`inputs.file(descriptors)`** — Gradle's up-to-date check knows sources, classpath and compiler arguments; the
+  `-A` value is a *path* that does not change when the schema does. Without this line a `.proto` change regenerates
+  the descriptor set but leaves `compileJava UP-TO-DATE`, so the codecs go stale. With it, the change recompiles
+  and any mismatch surfaces as a compile error.
+- **`classpath += files(...resources.srcDirs)`** — Gradle compiles without `src/main/resources` on the classpath,
+  so a `META-INF/services/io.github.hurelhuyag.protobuf.ProtoConverter` in the module being compiled is invisible
+  to the processor until you add it (Maven puts `target/classes`, resources included, on the compile classpath).
+  Only needed for converters declared in the same module; converters from a library are found through
+  `annotationProcessor("com.acme:converters:1.0")` next to the `implementation` dependency.
+- **`builtins.removeIf { it.name == "java" }`** — the plugin generates protoc's Java classes by default; nothing
+  here needs them.
+
+Incremental annotation processing: the processor does not declare itself isolating or aggregating, because it
+reads the descriptor set and service files, which Gradle's incremental contracts do not track. Gradle therefore
+recompiles the whole module when anything in it changes — correct, just not incremental, and what Maven does
+regardless.
+
 ## Declaring records
 
 - `@ProtoMessage("pkg.Message")` on a record; with no value the message whose simple name matches the record's is
