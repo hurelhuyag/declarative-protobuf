@@ -12,12 +12,12 @@
     <artifactId>declarative-protobuf-example</artifactId>
     <name>declarative-protobuf-example</name>
     <description>
-        How to use declarative-protobuf from a consumer project: a .proto with every data type, the matching
-        records, and the Maven wiring that turns the .proto into a descriptor set and runs the processor.
+        How to use declarative-protobuf from a consumer project: .proto files in, records and codecs out, and the
+        Maven wiring that runs protoc and the generator before javac.
     </description>
 
     <dependencies>
-        <!-- 1. the runtime: annotations + DeclarativeProtobuf facade (brings protobuf-javalite transitively) -->
+        <!-- the only runtime dependency: the facade and the wire helpers the generated codecs call -->
         <dependency>
             <groupId>io.github.hurelhuyag</groupId>
             <artifactId>declarative-protobuf-api</artifactId>
@@ -32,7 +32,7 @@
 
     <build>
         <plugins>
-            <!-- 2. compile src/main/resources/proto/*.proto into a FileDescriptorSet (no Java classes generated) -->
+            <!-- 1. .proto files into a descriptor set; no protoc Java classes are generated -->
             <plugin>
                 <groupId>io.github.ascopes</groupId>
                 <artifactId>protobuf-maven-plugin</artifactId>
@@ -56,24 +56,58 @@
                 </executions>
             </plugin>
 
-            <!-- 3. run the annotation processor against that descriptor set -->
+            <!-- 2. the descriptor set into records and codecs -->
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <configuration>
-                    <annotationProcessorPaths>
-                        <path>
-                            <groupId>io.github.hurelhuyag</groupId>
-                            <artifactId>declarative-protobuf-processor</artifactId>
-                            <version>${project.version}</version>
-                        </path>
-                    </annotationProcessorPaths>
-                    <compilerArgs>
-                        <arg>-Adeclarative.protobuf.descriptors=${project.build.directory}/generated/descriptors.pb</arg>
-                    </compilerArgs>
-                </configuration>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>io.github.hurelhuyag</groupId>
+                        <artifactId>declarative-protobuf-generator</artifactId>
+                        <version>${project.version}</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <id>generate-records</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <mainClass>io.github.hurelhuyag.protobuf.generator.Main</mainClass>
+                            <includePluginDependencies>true</includePluginDependencies>
+                            <includeProjectDependencies>false</includeProjectDependencies>
+                            <arguments>
+                                <argument>${project.build.directory}/generated/descriptors.pb</argument>
+                                <argument>${project.build.directory}/generated-sources/records</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- 3. the generated sources are ordinary sources -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.1</version>
+                <executions>
+                    <execution>
+                        <id>add-records</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.build.directory}/generated-sources/records</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
-
 </project>

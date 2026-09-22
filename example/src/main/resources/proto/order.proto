@@ -1,0 +1,50 @@
+// The narrative example: a realistic message, generated into records by declarative-protobuf-generator.
+syntax = "proto3";
+
+package example.orders;
+
+option java_package = "io.github.hurelhuyag.protobuf.example";
+
+import "google/protobuf/timestamp.proto";
+
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  NEW = 1;
+  PAID = 2;
+  SHIPPED = 3;
+}
+
+// A UUID as its two 64-bit halves: 20 bytes on the wire, and every language builds its own UUID from them.
+message Uuid {
+  fixed64 msb = 1;
+  fixed64 lsb = 2;
+}
+
+message Address {
+  string street = 1;
+  string city = 2;
+  string country = 3;
+}
+
+message Line {
+  string sku = 1;
+  int32 quantity = 2;
+  int64 unit_price_cents = 3;
+}
+
+message Order {
+  Uuid id = 1;
+  string customer = 2;
+  Status status = 3;
+  google.protobuf.Timestamp created_at = 4;
+  Address shipping = 5;
+  repeated Line lines = 6;
+  map<string, string> attributes = 7;
+  optional int32 discount_percent = 8;
+
+  // one of these, or none: the generator makes it a sealed interface, so "both" cannot be written down
+  oneof payment {
+    string card_token = 9;
+    string invoice_ref = 10;
+  }
+}

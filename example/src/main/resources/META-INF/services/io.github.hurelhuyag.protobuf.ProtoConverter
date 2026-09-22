@@ -1,3 +1,0 @@
-# ProtoConverter implementations, ServiceLoader style. The processor reads this file from the compile classpath
-# (this module's target/classes) and, for converter libraries, from jars on the annotation processor path.
-io.github.hurelhuyag.protobuf.example.UuidConverter

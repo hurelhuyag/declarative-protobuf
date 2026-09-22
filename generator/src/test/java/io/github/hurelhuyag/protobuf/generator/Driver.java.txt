@@ -1,0 +1,107 @@
+package demo;
+
+import io.github.hurelhuyag.protobuf.JavaProtobuf;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
+/** Written against the generated API, compiled together with it. */
+public final class Driver {
+
+    public static Everything sample() {
+        return new Everything(
+            1.5d, 2.5f, -3, -4L, -1, -1L, -7, -8L, 9, 10L, -11, -12L, true, "text",
+            ByteBuffer.wrap("raw".getBytes(StandardCharsets.UTF_8)),
+            0, "",
+            Color.GREEN,
+            new Point(3, 4),
+            new Tree("root", List.of(new Tree("leaf", List.of()))),
+            List.of(1, -2, 300),
+            List.of("a", "b"),
+            List.of(new Point(1, 1), new Point(2, 2)),
+            List.of(Color.RED, Color.GREEN),
+            Map.of("k", 7),
+            Map.of(9L, new Point(5, 6)),
+            new Everything.Shape.Label("circle"),
+            Instant.ofEpochSecond(1_700_000_000L, 123),
+            Duration.ofSeconds(-1, -500_000_000),
+            0,
+            new Everything.Nested(42, Everything.Nested.Kind.A)
+        );
+    }
+
+    /** All defaults, except the oneof and the enum. */
+    public static Everything of(Everything.Shape shape, Color color) {
+        return new Everything(
+            0d, 0f, 0, 0L, 0, 0L, 0, 0L, 0, 0L, 0, 0L, false, "", ByteBuffer.allocate(0),
+            null, null, color, null, null,
+            List.of(), List.of(), List.of(), List.of(), Map.of(), Map.of(),
+            shape, null, null, null, null
+        );
+    }
+
+    public static byte[] encodeSample() {
+        return JavaProtobuf.encode(sample());
+    }
+
+    public static boolean roundTrips() throws Exception {
+        return sample().equals(JavaProtobuf.decode(encodeSample(), Everything.class));
+    }
+
+    public static byte[] encodeEmpty() {
+        return JavaProtobuf.encode(of(null, Color.COLOR_UNSPECIFIED));
+    }
+
+    public static byte[] encodeShape(String which) {
+        Everything.Shape shape = switch (which) {
+            case "label" -> new Everything.Shape.Label("");          // default value, still written
+            case "radius" -> new Everything.Shape.Radius(0);
+            case "center" -> new Everything.Shape.Center(new Point(0, 0));
+            default -> null;
+        };
+        return JavaProtobuf.encode(of(shape, Color.COLOR_UNSPECIFIED));
+    }
+
+    public static String describeShape(byte[] bytes) throws Exception {
+        Everything.Shape shape = JavaProtobuf.decode(bytes, Everything.class).shape();
+        if (shape instanceof Everything.Shape.Label label) return "label:" + label.value();
+        else if (shape instanceof Everything.Shape.Radius radius) return "radius:" + radius.value();
+        else if (shape instanceof Everything.Shape.Center center) return "center:" + center.value().x();
+        return "none";
+    }
+
+    public static String colorName(byte[] bytes) throws Exception {
+        return JavaProtobuf.decode(bytes, Everything.class).color().name();
+    }
+
+    public static String encodeUnrecognized() {
+        try {
+            JavaProtobuf.encode(of(null, Color.UNRECOGNIZED));
+            return "no exception";
+        } catch (IllegalArgumentException e) {
+            return e.getMessage();
+        }
+    }
+
+    /** Collections are never null, whatever the caller passes. */
+    public static boolean nullCollectionsBecomeEmpty() {
+        Everything value = new Everything(
+            0d, 0f, 0, 0L, 0, 0L, 0, 0L, 0, 0L, 0, 0L, false, "", ByteBuffer.allocate(0),
+            null, null, Color.COLOR_UNSPECIFIED, null, null,
+            null, null, null, null, null, null,
+            null, null, null, null, null
+        );
+        return value.ints().isEmpty() && value.counts().isEmpty() && JavaProtobuf.encode(value).length == 0;
+    }
+
+    public static String describeInts(byte[] bytes) throws Exception {
+        return JavaProtobuf.decode(bytes, Everything.class).ints().toString();
+    }
+
+    private Driver() {
+    }
+}

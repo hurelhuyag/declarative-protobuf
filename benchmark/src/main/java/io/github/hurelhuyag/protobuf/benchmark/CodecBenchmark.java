@@ -1,7 +1,7 @@
 package io.github.hurelhuyag.protobuf.benchmark;
 
-import com.google.protobuf.InvalidProtocolBufferException;
-import io.github.hurelhuyag.protobuf.DeclarativeProtobuf;
+import io.github.hurelhuyag.protobuf.JavaProtobuf;
+import io.github.hurelhuyag.protobuf.benchmark.records.Order;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -58,10 +58,10 @@ public class CodecBenchmark {
         message = Workload.message(lines, attributes, coupons);
         bytes = message.toByteArray();
         // both sides must agree on the wire before any number means anything
-        if (!Arrays.equals(bytes, DeclarativeProtobuf.encode(record))) {
+        if (!Arrays.equals(bytes, JavaProtobuf.encode(record))) {
             throw new IllegalStateException("encodings differ");
         }
-        if (!record.equals(DeclarativeProtobuf.decode(bytes, Order.class))) {
+        if (!record.equals(JavaProtobuf.decode(bytes, Order.class))) {
             throw new IllegalStateException("decode differs");
         }
         System.out.printf("%n# %s payload: %d bytes%n", size, bytes.length);
@@ -79,7 +79,7 @@ public class CodecBenchmark {
 
     @Benchmark
     public byte[] encode_declarative() {
-        return DeclarativeProtobuf.encode(record);
+        return JavaProtobuf.encode(record);
     }
 
     @Benchmark
@@ -96,12 +96,11 @@ public class CodecBenchmark {
 
     @Benchmark
     public Order decode_declarative() throws IOException {
-        return DeclarativeProtobuf.decode(bytes, Order.class);
+        return JavaProtobuf.decode(bytes, Order.class);
     }
 
     @Benchmark
-    public io.github.hurelhuyag.protobuf.benchmark.proto.Order decode_protobufJava()
-        throws InvalidProtocolBufferException {
+    public io.github.hurelhuyag.protobuf.benchmark.proto.Order decode_protobufJava() throws IOException {
         return io.github.hurelhuyag.protobuf.benchmark.proto.Order.parseFrom(bytes);
     }
 }

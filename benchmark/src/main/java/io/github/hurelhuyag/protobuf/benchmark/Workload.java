@@ -1,6 +1,10 @@
 package io.github.hurelhuyag.protobuf.benchmark;
 
 import com.google.protobuf.Timestamp;
+import io.github.hurelhuyag.protobuf.benchmark.records.Address;
+import io.github.hurelhuyag.protobuf.benchmark.records.Line;
+import io.github.hurelhuyag.protobuf.benchmark.records.Order;
+import io.github.hurelhuyag.protobuf.benchmark.records.Status;
 
 import java.time.Instant;
 import java.util.ArrayList;

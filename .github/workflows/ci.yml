@@ -44,8 +44,11 @@ jobs:
           org.codehaus.mojo:exec-maven-plugin:3.5.0:java
           -Dexec.mainClass=io.github.hurelhuyag.protobuf.example.Main
 
-      - name: Show generated codec for the example
-        run: sed -n '1,60p' example/target/generated-sources/annotations/io/github/hurelhuyag/protobuf/example/PointProtoCodec.java
+      - name: Show what the generator produced
+        run: |
+          find example/target/generated-sources/records -name '*.java' | sort
+          echo '--- Order.java'
+          cat example/target/generated-sources/records/io/github/hurelhuyag/protobuf/example/Order.java
 
       - name: Surefire reports
         if: always()

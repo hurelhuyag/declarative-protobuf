@@ -13,7 +13,7 @@
 
     <modules>
         <module>api</module>
-        <module>processor</module>
+        <module>generator</module>
         <module>example</module>
         <module>benchmark</module>
     </modules>
