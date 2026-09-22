@@ -9,7 +9,7 @@ import java.nio.ByteBuffer;
  * Binds to {@code example.OptionalScalars}: explicit presence, so boxed types. {@code null} means the field is
  * absent; a non-null default (0, "", false) is written to the wire. Declaring {@code int} here is a compile error.
  */
-@ProtoMessage("example.OptionalScalars")
+@ProtoMessage
 public record OptionalScalars(
     @Proto(1) Double doubleValue,
     @Proto(2) Float floatValue,

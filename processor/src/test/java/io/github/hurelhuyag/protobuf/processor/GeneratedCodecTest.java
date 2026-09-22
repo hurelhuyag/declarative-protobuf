@@ -304,6 +304,23 @@ class GeneratedCodecTest {
         assertNull(component(empty, "primary"));
     }
 
+    /** Bare @ProtoMessage: fixture.Line -> test.Line and fixture.other.Line -> other.Line via java_package. */
+    @Test
+    void bareAnnotationResolvesByJavaName() throws Exception {
+        Class<?> otherLine = compilation.load("fixture.other.Line");
+        Object value = otherLine.getConstructors()[0].newInstance("n");
+        byte[] bytes = DeclarativeProtobuf.encode(value);
+        Descriptor other = otherDescriptor();
+        assertEquals("n", DynamicMessage.parseFrom(other, bytes).getField(other.findFieldByName("name")));
+        assertEquals(value, DeclarativeProtobuf.decode(bytes, otherLine));
+    }
+
+    private static Descriptor otherDescriptor() throws Exception {
+        return com.google.protobuf.Descriptors.FileDescriptor
+            .buildFrom(TestSchema.OTHER, new com.google.protobuf.Descriptors.FileDescriptor[0])
+            .findMessageTypeByName("Line");
+    }
+
     @Test
     void codecLookupFailsClearlyForUnboundType() {
         IllegalArgumentException e = assertThrows(

@@ -12,7 +12,7 @@ import java.nio.ByteBuffer;
  * {@code bytes} decodes to a read-only {@link ByteBuffer} and encodes the buffer's remaining bytes; buffers compare
  * by content, so record {@code equals} works. {@code byte[]} is accepted too, but arrays compare by reference.
  */
-@ProtoMessage("example.Scalars")
+@ProtoMessage
 public record Scalars(
     @Proto(1) double doubleValue,
     @Proto(2) float floatValue,

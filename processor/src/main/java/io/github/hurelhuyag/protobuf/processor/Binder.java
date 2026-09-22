@@ -177,19 +177,17 @@ final class Binder {
         };
     }
 
-    /** Like {@link #message(TypeElement)} but silent: the message a record's {@code @ProtoMessage} names, or null. */
-    private Descriptor boundMessage(TypeElement record) {
-        String name = record.getAnnotation(ProtoMessage.class).value();
-        if (!name.isEmpty()) return schema.message(name);
-        List<Descriptor> candidates = schema.messagesNamed(record.getSimpleName().toString());
-        return candidates.size() == 1 ? candidates.get(0) : null;
-    }
+
 
     static String codecClass(Elements elements, TypeElement type) {
         return elements.getBinaryName(type).toString().replace('$', '_') + "ProtoCodec";
     }
 
-    /** Resolves the message a record is bound to, reporting an error and returning null when it cannot. */
+    /**
+     * Resolves the message a record is bound to, reporting an error and returning null when it cannot. With no
+     * explicit name, the record's qualified name is matched against the Java name protoc would give each message
+     * ({@code java_package} or proto package, plus the nested path); failing that, a unique simple name.
+     */
     Descriptor message(TypeElement record) {
         String name = record.getAnnotation(ProtoMessage.class).value();
         if (!name.isEmpty()) {
@@ -197,17 +195,30 @@ final class Binder {
             if (message == null) error(record, "no message '" + name + "' in the descriptor set");
             return message;
         }
+        Descriptor message = boundMessage(record);
+        if (message != null) return message;
         List<Descriptor> candidates = schema.messagesNamed(record.getSimpleName().toString());
-        if (candidates.size() == 1) return candidates.get(0);
+        String hint = " nor a unique message named '" + record.getSimpleName() + "'";
         if (candidates.isEmpty()) {
-            error(record, "no message named '" + record.getSimpleName() + "' in the descriptor set; give @ProtoMessage"
-                + " the fully qualified message name");
+            error(record, "no message with Java name '" + record.getQualifiedName() + "' (java_package + name)" + hint
+                + " in the descriptor set; give @ProtoMessage the fully qualified message name");
         } else {
-            error(record, "message name '" + record.getSimpleName() + "' is ambiguous: "
-                + candidates.stream().map(Descriptor::getFullName).toList() + "; give @ProtoMessage the fully qualified"
+            List<String> names = candidates.stream().map(Descriptor::getFullName).toList();
+            error(record, "no message with Java name '" + record.getQualifiedName() + "' (java_package + name), and '"
+                + record.getSimpleName() + "' is ambiguous: " + names + "; give @ProtoMessage the fully qualified"
                 + " message name");
         }
         return null;
+    }
+
+    /** Silent form of {@link #message(TypeElement)}: the message a record binds to, or null. */
+    private Descriptor boundMessage(TypeElement record) {
+        String name = record.getAnnotation(ProtoMessage.class).value();
+        if (!name.isEmpty()) return schema.message(name);
+        Descriptor byJavaName = schema.messageForJavaName(record.getQualifiedName().toString());
+        if (byJavaName != null) return byJavaName;
+        List<Descriptor> candidates = schema.messagesNamed(record.getSimpleName().toString());
+        return candidates.size() == 1 ? candidates.get(0) : null;
     }
 
     EnumDescriptor enumType(TypeElement enumElement) {
@@ -217,13 +228,17 @@ final class Binder {
             if (enumType == null) error(enumElement, "no enum '" + name + "' in the descriptor set");
             return enumType;
         }
+        EnumDescriptor byJavaName = schema.enumForJavaName(enumElement.getQualifiedName().toString());
+        if (byJavaName != null) return byJavaName;
         List<EnumDescriptor> candidates = schema.enumsNamed(enumElement.getSimpleName().toString());
         if (candidates.size() == 1) return candidates.get(0);
         if (candidates.isEmpty()) {
-            error(enumElement, "no enum named '" + enumElement.getSimpleName() + "' in the descriptor set; give"
+            error(enumElement, "no enum with Java name '" + enumElement.getQualifiedName() + "' (java_package + name)"
+                + " nor a unique enum named '" + enumElement.getSimpleName() + "' in the descriptor set; give"
                 + " @ProtoEnum the fully qualified enum name");
         } else {
-            error(enumElement, "enum name '" + enumElement.getSimpleName() + "' is ambiguous: "
+            error(enumElement, "no enum with Java name '" + enumElement.getQualifiedName() + "' (java_package + name),"
+                + " and '" + enumElement.getSimpleName() + "' is ambiguous: "
                 + candidates.stream().map(EnumDescriptor::getFullName).toList() + "; give @ProtoEnum the fully"
                 + " qualified enum name");
         }

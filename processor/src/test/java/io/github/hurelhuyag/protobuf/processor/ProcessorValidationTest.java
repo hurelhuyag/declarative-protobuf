@@ -134,10 +134,20 @@ class ProcessorValidationTest {
     }
 
     @Test
-    void ambiguousSimpleName() throws IOException {
-        // no message in the schema is called Bad
+    void bareAnnotationWithNoMatch() throws IOException {
+        // no message in the schema is called Bad, and bad.Bad is nobody's Java name
         String m = failing("@ProtoMessage public record Bad(@Proto(1) long id) {}");
-        assertMentions(m, "no message named 'Bad'");
+        assertMentions(m, "no message with Java name 'bad.Bad'", "nor a unique message named 'Bad'");
+    }
+
+    @Test
+    void bareAnnotationAmbiguousSimpleName() throws IOException {
+        // two messages are called Line (test.Line, other.Line) and bad.Line matches neither Java name
+        Map<String, String> sources = new LinkedHashMap<>();
+        sources.put("bad.Line", HEADER + "@ProtoMessage public record Line(@Proto(1) String name) {}");
+        Compilation c = Compilation.compile(descriptors, Files.createTempDirectory(dir, "amb"), sources);
+        assertFalse(c.success());
+        assertMentions(c.messages(), "'Line' is ambiguous: [test.Line, other.Line]");
     }
 
     @Test

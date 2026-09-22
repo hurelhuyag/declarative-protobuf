@@ -10,7 +10,7 @@ dependency is `protobuf-javalite`, and it stays behind the API: your records and
 `com.google.protobuf.*`. No descriptors, reflection or builders are involved at runtime.
 
 ```java
-@ProtoMessage("acme.orders.Order")
+@ProtoMessage                                // acme/orders.proto: option java_package = "com.acme.orders"
 public record Order(
     @Proto(1) long id,
     @Proto(2) String customer,
@@ -22,7 +22,7 @@ public record Order(
     @Proto(12) UUID requestId              // your own type, via a registered ProtoConverter
 ) {}
 
-@ProtoEnum("acme.orders.Status")
+@ProtoEnum
 public enum Status { @Proto(0) UNSPECIFIED, @Proto(1) OPEN, @Proto(2) CLOSED, @ProtoUnrecognized UNRECOGNIZED }
 
 byte[] bytes = DeclarativeProtobuf.encode(order);
@@ -172,13 +172,17 @@ regardless.
 
 ## Declaring records
 
-- `@ProtoMessage("pkg.Message")` on a record; with no value the message whose simple name matches the record's is
-  used (compile error if ambiguous).
+- `@ProtoMessage` on a record. With no value, the record's qualified name is matched against the Java name protoc
+  would give each message — the file's `java_package` (or its proto package when unset) plus the message's nested
+  path, so `com.acme.orders.Order` binds to `Order` in a file with `option java_package = "com.acme.orders"`, and
+  `Outer.Inner` to the nested `Outer.Inner`. Failing that, a message with the same simple name is used if there is
+  exactly one. `@ProtoMessage("pkg.Message")` names the message explicitly, e.g. for a second record bound to the
+  same message.
 - `@Proto(n)` on **every** component. A record may declare only a subset of the message's fields: undeclared
   fields are skipped on decode and never written.
 - Records must be accessible from their package (nested records are fine: `Outer.Inner` gets
   `Outer_InnerProtoCodec`).
-- `@ProtoEnum` on a Java enum, `@Proto(n)` on each constant; every schema value must be covered and a constant with
+- `@ProtoEnum` on a Java enum, resolved the same way; `@Proto(n)` on each constant; every schema value must be covered and a constant with
   `@Proto(0)` is required (proto3 guarantees one). An optional `@ProtoUnrecognized` constant receives value numbers
   unknown to this build; without one, decoding an unknown number fails and the processor warns.
 

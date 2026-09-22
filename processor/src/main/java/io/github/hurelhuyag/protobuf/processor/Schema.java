@@ -50,8 +50,10 @@ final class Schema {
 
     private final Map<String, Descriptor> messagesByFullName = new LinkedHashMap<>();
     private final Map<String, List<Descriptor>> messagesBySimpleName = new HashMap<>();
+    private final Map<String, Descriptor> messagesByJavaName = new HashMap<>();
     private final Map<String, EnumDescriptor> enumsByFullName = new LinkedHashMap<>();
     private final Map<String, List<EnumDescriptor>> enumsBySimpleName = new HashMap<>();
+    private final Map<String, EnumDescriptor> enumsByJavaName = new HashMap<>();
 
     static Schema load(List<Path> descriptorSets) throws IOException, DescriptorValidationException {
         Map<String, FileDescriptorProto> protos = new LinkedHashMap<>();
@@ -101,6 +103,7 @@ final class Schema {
         if (message.getOptions().getMapEntry()) return;
         messagesByFullName.put(message.getFullName(), message);
         messagesBySimpleName.computeIfAbsent(message.getName(), k -> new ArrayList<>()).add(message);
+        messagesByJavaName.put(javaName(message.getFile(), message.getFullName()), message);
         for (Descriptor nested : message.getNestedTypes()) index(nested);
         for (EnumDescriptor enumType : message.getEnumTypes()) index(enumType);
     }
@@ -108,6 +111,19 @@ final class Schema {
     private void index(EnumDescriptor enumType) {
         enumsByFullName.put(enumType.getFullName(), enumType);
         enumsBySimpleName.computeIfAbsent(enumType.getName(), k -> new ArrayList<>()).add(enumType);
+        enumsByJavaName.put(javaName(enumType.getFile(), enumType.getFullName()), enumType);
+    }
+
+    /**
+     * The qualified Java name a type maps to: the file's {@code java_package} (or its proto package when unset)
+     * plus the type's path within the file, e.g. {@code com.acme.orders.Outer.Inner} for {@code Outer.Inner} in
+     * a file with {@code package acme.orders; option java_package = "com.acme.orders";}.
+     */
+    private static String javaName(FileDescriptor file, String fullName) {
+        String protoPackage = file.getPackage();
+        String path = protoPackage.isEmpty() ? fullName : fullName.substring(protoPackage.length() + 1);
+        String javaPackage = file.getOptions().hasJavaPackage() ? file.getOptions().getJavaPackage() : protoPackage;
+        return javaPackage.isEmpty() ? path : javaPackage + "." + path;
     }
 
     Descriptor message(String fullName) {
@@ -118,11 +134,20 @@ final class Schema {
         return messagesBySimpleName.getOrDefault(simpleName, List.of());
     }
 
+    /** The message whose Java name (see {@link #javaName}) is the given qualified class name, or null. */
+    Descriptor messageForJavaName(String qualifiedName) {
+        return messagesByJavaName.get(qualifiedName);
+    }
+
     EnumDescriptor enumType(String fullName) {
         return enumsByFullName.get(fullName);
     }
 
     List<EnumDescriptor> enumsNamed(String simpleName) {
         return enumsBySimpleName.getOrDefault(simpleName, List.of());
+    }
+
+    EnumDescriptor enumForJavaName(String qualifiedName) {
+        return enumsByJavaName.get(qualifiedName);
     }
 }

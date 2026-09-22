@@ -4,6 +4,9 @@ syntax = "proto3";
 
 package example;
 
+// With java_package set, a record named <java_package>.<Message> binds to <Message> with a bare @ProtoMessage.
+option java_package = "io.github.hurelhuyag.protobuf.example";
+
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";

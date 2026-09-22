@@ -14,7 +14,7 @@ import java.util.UUID;
  * Binds to {@code example.Everything}. Note what is <em>not</em> here: nothing about wire types, packing, map
  * entries or which fields form the oneof — all of that is read from the schema at compile time.
  */
-@ProtoMessage("example.Everything")
+@ProtoMessage
 public record Everything(
     // embedded messages
     @Proto(1) Scalars scalars,

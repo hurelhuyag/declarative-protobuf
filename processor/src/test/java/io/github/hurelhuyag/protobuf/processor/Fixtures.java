@@ -89,7 +89,7 @@ final class Fixtures {
         @ProtoMessage
         public record Outer(@Proto(1) Inner inner) {
 
-            @ProtoMessage("test.Outer.Inner")
+            @ProtoMessage
             public record Inner(@Proto(1) int n) {
             }
         }
@@ -249,6 +249,17 @@ final class Fixtures {
         """;
 
 
+    /** fixture.other.Line resolves to other.Line by Java name although 'Line' alone is ambiguous. */
+    static final String OTHER_LINE = """
+        package fixture.other;
+
+        import io.github.hurelhuyag.protobuf.*;
+
+        @ProtoMessage
+        public record Line(@Proto(1) String name) {
+        }
+        """;
+
     static Map<String, String> all() {
         Map<String, String> sources = new LinkedHashMap<>();
         sources.put("fixture.Status", STATUS);
@@ -262,6 +273,7 @@ final class Fixtures {
         sources.put("fixture.Percent", PERCENT);
         sources.put("fixture.LineTextCodec", LINE_TEXT_CODEC);
         sources.put("fixture.Custom", CUSTOM);
+        sources.put("fixture.other.Line", OTHER_LINE);
         return sources;
     }
 }

@@ -7,7 +7,7 @@ import io.github.hurelhuyag.protobuf.ProtoMessage;
 @ProtoMessage
 public record Outer(@Proto(1) Inner inner) {
 
-    @ProtoMessage("example.Outer.Inner")
+    @ProtoMessage
     public record Inner(@Proto(1) String id) {
     }
 }

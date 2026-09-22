@@ -8,6 +8,7 @@ import com.google.protobuf.DescriptorProtos.FieldDescriptorProto.Label;
 import com.google.protobuf.DescriptorProtos.FieldDescriptorProto.Type;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.DescriptorProtos.FileDescriptorSet;
+import com.google.protobuf.DescriptorProtos.FileOptions;
 import com.google.protobuf.DescriptorProtos.MessageOptions;
 import com.google.protobuf.DescriptorProtos.OneofDescriptorProto;
 import com.google.protobuf.Descriptors.Descriptor;
@@ -25,6 +26,7 @@ import java.nio.file.Path;
  * <pre>
  * syntax = "proto3";
  * package test;
+ * option java_package = "fixture";
  * enum Status { STATUS_UNSPECIFIED = 0; OPEN = 1; CLOSED = 2; }
  * enum Status { ...; reserved 10 to 12; }
  * message Line { string sku = 1; int32 qty = 2; double price = 3; reserved 4 to 5; reserved "legacy"; }
@@ -40,6 +42,8 @@ import java.nio.file.Path;
  * message Tree { int32 value = 1; repeated Tree children = 2; }
  * message Outer { message Inner { int32 n = 1; } Inner inner = 1; }
  * </pre>
+ * plus a second file {@code other.proto} ({@code package other; option java_package = "fixture.other";}) holding
+ * another message called {@code Line}, so that simple-name matching alone would be ambiguous.
  */
 final class TestSchema {
 
@@ -47,6 +51,7 @@ final class TestSchema {
         .setName("test.proto")
         .setPackage("test")
         .setSyntax("proto3")
+        .setOptions(FileOptions.newBuilder().setJavaPackage("fixture"))
         .addDependency("google/protobuf/timestamp.proto")
         .addDependency("google/protobuf/duration.proto")
         .addDependency("google/protobuf/wrappers.proto")
@@ -102,6 +107,14 @@ final class TestSchema {
             .addNestedType(DescriptorProto.newBuilder().setName("Inner").addField(scalar("n", 1, Type.TYPE_INT32))))
         .build();
 
+    static final FileDescriptorProto OTHER = FileDescriptorProto.newBuilder()
+        .setName("other.proto")
+        .setPackage("other")
+        .setSyntax("proto3")
+        .setOptions(FileOptions.newBuilder().setJavaPackage("fixture.other"))
+        .addMessageType(DescriptorProto.newBuilder().setName("Line").addField(scalar("name", 1, Type.TYPE_STRING)))
+        .build();
+
     private static FieldDescriptorProto.Builder scalar(String name, int number, Type type) {
         return FieldDescriptorProto.newBuilder().setName(name).setNumber(number).setType(type)
             .setLabel(Label.LABEL_OPTIONAL);
@@ -121,7 +134,7 @@ final class TestSchema {
     /** Writes a descriptor set without imports, relying on the processor's bundled google/protobuf descriptors. */
     static Path write(Path dir) throws IOException {
         Path file = dir.resolve("test.pb");
-        Files.write(file, FileDescriptorSet.newBuilder().addFile(FILE).build().toByteArray());
+        Files.write(file, FileDescriptorSet.newBuilder().addFile(FILE).addFile(OTHER).build().toByteArray());
         return file;
     }
 
