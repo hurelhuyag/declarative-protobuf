@@ -85,8 +85,34 @@ final class TypeMapper {
         return new Field.Oneof(oneof, Names.oneofName(oneof), type, cases);
     }
 
-    /** The Java type and coded-stream calls for one value. */
+    /** The Java type and coded-stream calls for one value, with any converter the schema asked for applied. */
     static Value value(FieldDescriptor field) {
+        Value wire = wireValue(field);
+        Options.Converted converted = converterFor(field);
+        return converted == null
+            ? wire
+            : new ConverterValue(wire, converted.javaType(), converted.converterClass());
+    }
+
+    /**
+     * The converter for a field: its own {@code (declarative.java_converter)} if it has one, otherwise the one on
+     * the message type it carries.
+     */
+    private static Options.Converted converterFor(FieldDescriptor field) {
+        Options.Converted own = Options.of(field.toProto().getOptions(), "field '" + field.getFullName() + "'");
+        if (own != null) return own;
+        if (field.getJavaType() != FieldDescriptor.JavaType.MESSAGE) return null;
+        Descriptor message = field.getMessageType();
+        if (WELL_KNOWN.containsKey(message.getFullName())) return null;
+        return Options.of(message.toProto().getOptions(), "message '" + message.getFullName() + "'");
+    }
+
+    /** True when a message is only ever seen through a converter, so nothing refers to its record by name. */
+    static Options.Converted converterOn(Descriptor message) {
+        return Options.of(message.toProto().getOptions(), "message '" + message.getFullName() + "'");
+    }
+
+    private static Value wireValue(FieldDescriptor field) {
         return switch (field.getJavaType()) {
             case INT, LONG, FLOAT, DOUBLE, BOOLEAN, STRING, BYTE_STRING -> Scalar.of(field.getType());
             case ENUM -> new EnumValue(Names.javaName(field.getEnumType()), zeroConstant(field.getEnumType()));

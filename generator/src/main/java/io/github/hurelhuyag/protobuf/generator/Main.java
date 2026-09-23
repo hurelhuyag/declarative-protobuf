@@ -7,8 +7,12 @@ import com.google.protobuf.compiler.PluginProtos.CodeGeneratorResponse;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * Two ways to run the generator:
@@ -49,12 +53,42 @@ public final class Main {
     ) throws Exception {
         FileDescriptorSet set = FileDescriptorSet.parseFrom(Files.readAllBytes(descriptorSet));
         Map<String, String> sources = Generator.generate(set, filesToGenerate, packageOverride);
+        Set<Path> written = new HashSet<>();
         for (Map.Entry<String, String> source : sources.entrySet()) {
             Path file = outputDirectory.resolve(source.getKey());
             Files.createDirectories(file.getParent());
             write(file, source.getValue());
+            written.add(file.toAbsolutePath().normalize());
         }
-        System.out.println("generated " + sources.size() + " files in " + outputDirectory);
+        int removed = prune(outputDirectory, written);
+        System.out.println("generated " + sources.size() + " files in " + outputDirectory
+            + (removed == 0 ? "" : " (" + removed + " stale removed)"));
+    }
+
+    /**
+     * Removes sources left over from an earlier run, so renaming or deleting a message does not leave a stale
+     * record behind to be compiled. The output directory belongs to the generator; only {@code .java} files in it
+     * are touched.
+     */
+    private static int prune(Path outputDirectory, Set<Path> written) throws IOException {
+        if (!Files.isDirectory(outputDirectory)) return 0;
+        List<Path> stale;
+        try (Stream<Path> files = Files.walk(outputDirectory)) {
+            stale = files
+                .filter(path -> path.toString().endsWith(".java"))
+                .filter(path -> !written.contains(path.toAbsolutePath().normalize()))
+                .toList();
+        }
+        for (Path file : stale) Files.delete(file);
+        try (Stream<Path> directories = Files.walk(outputDirectory)) {
+            for (Path directory : directories.sorted(Comparator.reverseOrder()).toList()) {
+                if (!Files.isDirectory(directory) || directory.equals(outputDirectory)) continue;
+                try (Stream<Path> entries = Files.list(directory)) {
+                    if (entries.findAny().isEmpty()) Files.delete(directory);
+                }
+            }
+        }
+        return stale.size();
     }
 
     /** Writes only when the content changed, so unchanged sources keep their timestamps and builds stay up to date. */

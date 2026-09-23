@@ -1,0 +1,19 @@
+package demo;
+
+import io.github.hurelhuyag.protobuf.ProtoConverter;
+
+import java.time.Instant;
+
+/** Named by a field option: an int64 of epoch millis, seen as an Instant. */
+public final class MillisConverter implements ProtoConverter<Long, Instant> {
+
+    @Override
+    public Instant fromWire(Long wire) {
+        return wire == 0L ? null : Instant.ofEpochMilli(wire);
+    }
+
+    @Override
+    public Long toWire(Instant value) {
+        return value.toEpochMilli();
+    }
+}

@@ -46,6 +46,14 @@
                     <outputDescriptorFile>${project.build.directory}/generated/descriptors.pb</outputDescriptorFile>
                     <outputDescriptorIncludeImports>true</outputDescriptorIncludeImports>
                     <embedSourcesInClassOutputs>false</embedSourcesInClassOutputs>
+                    <!-- declarative/options.proto travels in the api jar -->
+                    <importDependencies>
+                        <importDependency>
+                            <groupId>io.github.hurelhuyag</groupId>
+                            <artifactId>declarative-protobuf-api</artifactId>
+                            <version>${project.version}</version>
+                        </importDependency>
+                    </importDependencies>
                 </configuration>
                 <executions>
                     <execution>

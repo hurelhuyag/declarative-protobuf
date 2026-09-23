@@ -74,6 +74,7 @@ is enough, and the choice is the lossless one in every case.
 | nested message / enum | a record or enum nested inside the outer record, as the schema nests it |
 | `google.protobuf.Timestamp` / `Duration` | `Instant` / `java.time.Duration` |
 | `google.protobuf.*Value` wrappers | the boxed Java type, `null` = absent |
+| anything with `(declarative.java)` | the Java type you named, through your converter — see below |
 
 Names follow protoc: `java_package` (or the proto package) for the package, `json_name` — lowerCamelCase — for
 components, schema spelling for enum constants. A name that would collide with a keyword or with an `Object`
@@ -94,6 +95,66 @@ if (order.payment() instanceof Order.Payment.CardToken card) charge(card.value()
 
 `null` means no member is set. A member holding its type's default (`""`, `0`) is still written to the wire,
 because being a case *is* the presence — the same semantics protobuf has.
+
+## Custom Java types
+
+A generated record is a fine DTO, but sometimes the schema's shape is not the type you want to hold. Say so in
+the schema: `declarative/options.proto` (it travels inside the api jar) defines two options, and every other
+language ignores them.
+
+```proto
+import "declarative/options.proto";
+
+message Uuid {
+  option (declarative.java) = {
+    type: "java.util.UUID",
+    converter: "com.acme.UuidConverter"
+  };
+
+  fixed64 msb = 1;
+  fixed64 lsb = 2;
+}
+
+message Order {
+  Uuid id = 1;                    // the record component is a java.util.UUID
+  repeated Uuid related = 2;      // List<UUID>
+  map<string, Uuid> owners = 3;   // Map<String, UUID>
+}
+```
+
+```java
+public final class UuidConverter implements ProtoConverter<Uuid, UUID> {
+    public UUID fromWire(Uuid wire) { return new UUID(wire.msb(), wire.lsb()); }
+    public Uuid toWire(UUID value) { return new Uuid(value.getMostSignificantBits(), value.getLeastSignificantBits()); }
+}
+```
+
+On a **message**, the option converts every field of that type — declare it once, not per field. On a **field**,
+`(declarative.java_field)` does the same for that field alone and takes precedence; it is also the way to convert
+a scalar:
+
+```proto
+int64 created_millis = 7 [(declarative.java_field) = {
+  type: "java.time.Instant", converter: "com.acme.MillisConverter"
+}];
+```
+
+`W` is what the generator would otherwise have used — the generated record for a message field, the boxed scalar
+type for a scalar field — and the generated codec still does all the wire work, calling the converter once per
+value on the way in and out. The wire record (`Uuid` above) is still generated, because the converter needs it.
+Converters need a public no-arg constructor and must be stateless; one instance is shared per codec.
+
+Maven has to let protoc see the options file, which means adding the api jar as an import dependency:
+
+```xml
+<importDependencies>
+    <importDependency>
+        <groupId>io.github.hurelhuyag</groupId>
+        <artifactId>declarative-protobuf-api</artifactId>
+        <version>${declarative-protobuf.version}</version>
+    </importDependency>
+</importDependencies>
+```
 
 ## Maven wiring
 
@@ -177,9 +238,10 @@ format.
 
 ## What this branch gives up
 
-The annotation branch let you bind **your own** types to the wire: a domain record with exactly the fields you
-care about, `UUID` instead of a `Uuid` message, a partial projection of a large message. Here the records are
-DTOs generated from the schema, so mapping to domain types is the application's job — the same trade protoc's
-Java output makes, except these are immutable records with JDK types and no builders.
+Custom types come back through converters, but two things from the annotation branch do not: a record with only
+*some* of a message's fields (a projection), and a record whose component names or shape differ from the schema's.
+Here the records are generated from the schema, so a domain model that does not match it is the application's job
+to map — the same trade protoc's Java output makes, except these are immutable records with JDK types, no
+builders, and about a tenth of the generated code.
 
 The `master` branch keeps the annotation-based approach.

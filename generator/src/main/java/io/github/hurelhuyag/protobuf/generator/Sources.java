@@ -28,6 +28,16 @@ final class Sources {
     }
 
     static String simplify(String source, String ownPackage) {
+        return simplify(source, ownPackage, Map.of());
+    }
+
+    /**
+     * @param extra qualified types a converter brought in, keyed by qualified name; only those whose simple name
+     *              cannot collide with a type of this file are passed in
+     */
+    static String simplify(String source, String ownPackage, Map<String, String> extra) {
+        Map<String, String> importable = new LinkedHashMap<>(IMPORTABLE);
+        importable.putAll(extra);
         TreeSet<String> imports = new TreeSet<>();
         List<String> lines = new ArrayList<>(List.of(source.split("\n", -1)));
         for (int i = 0; i < lines.size(); i++) {
@@ -35,13 +45,15 @@ final class Sources {
             String trimmed = line.stripLeading();
             boolean comment = trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*");
             if (comment || line.startsWith("import ") || line.startsWith("package ")) continue;
-            lines.set(i, rewrite(line, ownPackage, imports));
+            lines.set(i, rewrite(line, ownPackage, imports, importable));
         }
         return withImports(lines, imports);
     }
 
     /** Rewrites the parts of a line that are not inside a string literal. */
-    private static String rewrite(String line, String ownPackage, TreeSet<String> imports) {
+    private static String rewrite(
+        String line, String ownPackage, TreeSet<String> imports, Map<String, String> importable
+    ) {
         StringBuilder out = new StringBuilder(line.length());
         StringBuilder code = new StringBuilder();
         boolean inString = false;
@@ -55,27 +67,29 @@ final class Sources {
                     inString = false;
                 }
             } else if (c == '"') {
-                out.append(shorten(code.toString(), ownPackage, imports));
+                out.append(shorten(code.toString(), ownPackage, imports, importable));
                 code.setLength(0);
                 out.append(c);
                 inString = true;
             } else if (c == '/' && i + 1 < line.length() && line.charAt(i + 1) == '/') {
                 // a trailing comment holds proto names; leave it exactly as written
-                out.append(shorten(code.toString(), ownPackage, imports)).append(line.substring(i));
+                out.append(shorten(code.toString(), ownPackage, imports, importable)).append(line.substring(i));
                 return out.toString();
             } else {
                 code.append(c);
             }
         }
-        return out.append(shorten(code.toString(), ownPackage, imports)).toString();
+        return out.append(shorten(code.toString(), ownPackage, imports, importable)).toString();
     }
 
-    private static String shorten(String code, String ownPackage, TreeSet<String> imports) {
+    private static String shorten(
+        String code, String ownPackage, TreeSet<String> imports, Map<String, String> importable
+    ) {
         String result = code;
-        for (Map.Entry<String, String> importable : IMPORTABLE.entrySet()) {
-            if (result.contains(importable.getKey())) {
-                result = result.replace(importable.getKey(), importable.getValue());
-                imports.add(importable.getKey());
+        for (Map.Entry<String, String> candidate : importable.entrySet()) {
+            if (result.contains(candidate.getKey())) {
+                result = result.replace(candidate.getKey(), candidate.getValue());
+                imports.add(candidate.getKey());
             }
         }
         result = result.replace("java.lang.", "");

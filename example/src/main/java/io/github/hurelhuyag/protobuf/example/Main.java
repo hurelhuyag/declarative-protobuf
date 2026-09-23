@@ -29,9 +29,8 @@ public final class Main {
     }
 
     static Order sample() {
-        UUID id = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
         return new Order(
-            new Uuid(id.getMostSignificantBits(), id.getLeastSignificantBits()),
+            UUID.fromString("123e4567-e89b-12d3-a456-426614174000"),   // a Uuid message on the wire
             "ann",
             Status.PAID,
             Instant.parse("2026-09-23T10:15:30Z"),

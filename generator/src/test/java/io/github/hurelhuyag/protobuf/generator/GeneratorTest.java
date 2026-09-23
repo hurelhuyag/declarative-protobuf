@@ -39,10 +39,12 @@ class GeneratorTest {
             Files.createDirectories(file.getParent());
             Files.writeString(file, source.getValue());
         }
-        Files.copy(
-            Path.of("src/test/java/io/github/hurelhuyag/protobuf/generator/Driver.java.txt"),
-            sourceDirectory.resolve("demo/Driver.java")
-        );
+        for (String handWritten : List.of("Driver", "UuidConverter", "MillisConverter")) {
+            Files.copy(
+                Path.of("src/test/java/io/github/hurelhuyag/protobuf/generator/" + handWritten + ".java.txt"),
+                sourceDirectory.resolve("demo/" + handWritten + ".java")
+            );
+        }
         compilation = Compilation.compile(sourceDirectory, dir.resolve("classes"));
         assertTrue(compilation.success(), compilation.messages());
     }
@@ -56,6 +58,7 @@ class GeneratorTest {
         assertEquals(
             List.of(
                 "demo/Color.java",
+                "demo/Uuid.java", "demo/UuidProtoCodec.java",
                 "demo/Point.java", "demo/PointProtoCodec.java",
                 "demo/Tree.java", "demo/TreeProtoCodec.java",
                 "demo/Everything.java", "demo/EverythingProtoCodec.java", "demo/Everything_NestedProtoCodec.java"
@@ -76,6 +79,28 @@ class GeneratorTest {
         assertEquals("circle", parsed.getField(EVERYTHING.findFieldByName("label")));
         assertEquals(List.of(1, -2, 300), parsed.getField(EVERYTHING.findFieldByName("ints")));
         assertTrue(parsed.hasField(EVERYTHING.findFieldByName("opt_int32")));   // present although it holds 0
+    }
+
+    /**
+     * A converter named by the schema: the record carries {@link java.util.UUID} and {@link java.time.Instant},
+     * the wire still carries the {@code Uuid} message and an {@code int64}.
+     */
+    @Test
+    void convertersNamedBySchemaOptions() throws Exception {
+        byte[] encoded = bytes("encodeSample");
+        DynamicMessage parsed = DynamicMessage.parseFrom(EVERYTHING, encoded);
+        DynamicMessage id = (DynamicMessage) parsed.getField(EVERYTHING.findFieldByName("request_id"));
+        Descriptor uuid = TestSchema.message("Uuid");
+        assertEquals(0x123e4567e89b12d3L, id.getField(uuid.findFieldByName("msb")));
+        assertEquals(1_700_000_000_123L, parsed.getField(EVERYTHING.findFieldByName("created_millis")));
+
+        assertEquals(
+            "123e4567-e89b-12d3-a456-426614174000"
+                + "|[00000000-0000-0000-0000-000000000001]"
+                + "|2023-11-14T22:13:20.123Z"
+                + "|{ann=00000000-0000-0000-0000-000000000002}",
+            compilation.call("demo.Driver", "describeUuids", new Class<?>[]{byte[].class}, (Object) encoded)
+        );
     }
 
     @Test

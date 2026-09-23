@@ -40,4 +40,24 @@ interface Value {
     default String sizeNoTag(String x) {
         throw new UnsupportedOperationException("not packable");
     }
+
+    /** The value as it is read and written; for a converted value, the wire-side value underneath it. */
+    default Value wire() {
+        return this;
+    }
+
+    /** Converts a wire-side value to the type the record declares. */
+    default String fromWire(String value) {
+        return value;
+    }
+
+    /** Converts a declared value to its wire-side form. */
+    default String toWire(String value) {
+        return value;
+    }
+
+    /** The user converter class this value calls, or null. */
+    default String converterClass() {
+        return null;
+    }
 }

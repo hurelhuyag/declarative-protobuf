@@ -41,6 +41,18 @@ sealed interface Field {
         int number() {
             return descriptor.getNumber();
         }
+
+        /** Type of the decode local: the wire-side type when a converter is attached. */
+        String localType() {
+            Value wire = value.wire();
+            return presence ? wire.boxedType() : wire.type();
+        }
+
+        /** The constructor argument built from the decode local. */
+        String constructorArg() {
+            if (value.wire() == value) return local();
+            return presence ? local() + " == null ? null : " + value.fromWire(local()) : value.fromWire(local());
+        }
     }
 
     record Repeated(FieldDescriptor descriptor, String name, Value element, boolean packed) implements Field {

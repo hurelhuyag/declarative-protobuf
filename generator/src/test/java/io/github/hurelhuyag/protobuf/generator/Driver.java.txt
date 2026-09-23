@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /** Written against the generated API, compiled together with it. */
 public final class Driver {
@@ -30,7 +31,11 @@ public final class Driver {
             Instant.ofEpochSecond(1_700_000_000L, 123),
             Duration.ofSeconds(-1, -500_000_000),
             0,
-            new Everything.Nested(42, Everything.Nested.Kind.A)
+            new Everything.Nested(42, Everything.Nested.Kind.A),
+            UUID.fromString("123e4567-e89b-12d3-a456-426614174000"),
+            List.of(UUID.fromString("00000000-0000-0000-0000-000000000001")),
+            Instant.ofEpochMilli(1_700_000_000_123L),
+            Map.of("ann", UUID.fromString("00000000-0000-0000-0000-000000000002"))
         );
     }
 
@@ -40,7 +45,7 @@ public final class Driver {
             0d, 0f, 0, 0L, 0, 0L, 0, 0L, 0, 0L, 0, 0L, false, "", ByteBuffer.allocate(0),
             null, null, color, null, null,
             List.of(), List.of(), List.of(), List.of(), Map.of(), Map.of(),
-            shape, null, null, null, null
+            shape, null, null, null, null, null, null, null, null
         );
     }
 
@@ -93,9 +98,15 @@ public final class Driver {
             0d, 0f, 0, 0L, 0, 0L, 0, 0L, 0, 0L, 0, 0L, false, "", ByteBuffer.allocate(0),
             null, null, Color.COLOR_UNSPECIFIED, null, null,
             null, null, null, null, null, null,
-            null, null, null, null, null
+            null, null, null, null, null, null, null, null, null
         );
         return value.ints().isEmpty() && value.counts().isEmpty() && JavaProtobuf.encode(value).length == 0;
+    }
+
+    /** The schema said UUID; the record says UUID, and the wire still carries two fixed64s. */
+    public static String describeUuids(byte[] bytes) throws Exception {
+        Everything value = JavaProtobuf.decode(bytes, Everything.class);
+        return value.requestId() + "|" + value.relatedIds() + "|" + value.createdMillis() + "|" + value.owners();
     }
 
     public static String describeInts(byte[] bytes) throws Exception {

@@ -1,0 +1,33 @@
+// Options that tell the Java generator to surface a message or a field as a Java type of your own.
+// Import this file to use them; every other language sees ordinary messages and ignores them.
+syntax = "proto3";
+
+package declarative;
+
+import "google/protobuf/descriptor.proto";
+
+// The Java type a value is seen as, and the ProtoConverter that maps the generated wire type to it.
+message JavaType {
+  string type = 1;
+  string converter = 2;
+}
+
+extend google.protobuf.MessageOptions {
+  // On a message: every field of this message type is converted.
+  //
+  //   message Uuid {
+  //     option (declarative.java) = {type: "java.util.UUID", converter: "com.acme.UuidConverter"};
+  //     fixed64 msb = 1;
+  //     fixed64 lsb = 2;
+  //   }
+  JavaType java = 50001;
+}
+
+extend google.protobuf.FieldOptions {
+  // On a single field, taking precedence over the message's own option. The only way to convert a scalar, e.g.
+  //
+  //   int64 created_millis = 7 [(declarative.java_field) = {
+  //     type: "java.time.Instant", converter: "com.acme.MillisConverter"
+  //   }];
+  JavaType java_field = 50001;
+}

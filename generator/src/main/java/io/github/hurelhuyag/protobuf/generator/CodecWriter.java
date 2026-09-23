@@ -46,12 +46,38 @@ final class CodecWriter {
         w.line("public static final " + codecName + " INSTANCE = new " + codecName + "();");
         w.line("");
         w.open("private " + codecName + "() {").close();
+        converterFields();
         embeddedHelpers();
         decode();
         encode();
         computeSize();
         w.close();
         return w.toString();
+    }
+
+    /** One shared instance per converter the schema attached to a field of this message. */
+    private void converterFields() {
+        java.util.Set<String> classes = new java.util.LinkedHashSet<>();
+        for (Field field : fields) {
+            if (field instanceof Field.Singular s) add(classes, s.value());
+            else if (field instanceof Field.Repeated r) add(classes, r.element());
+            else if (field instanceof Field.MapField m) {
+                add(classes, m.key());
+                add(classes, m.value());
+            } else if (field instanceof Field.Oneof o) {
+                for (Field.Oneof.Case member : o.cases()) add(classes, member.value());
+            }
+        }
+        if (classes.isEmpty()) return;
+        w.line("");
+        for (String converter : classes) {
+            w.line("private static final " + converter + " " + ConverterValue.instanceName(converter)
+                + " = new " + converter + "();");
+        }
+    }
+
+    private static void add(java.util.Set<String> classes, Value value) {
+        if (value.converterClass() != null) classes.add(value.converterClass());
     }
 
     /** Static, statically typed twins of the {@code Wire} helpers; call sites in other codecs stay monomorphic. */
@@ -94,7 +120,7 @@ final class CodecWriter {
         w.line("@Override");
         w.open("public " + recordType + " decode(CodedInputStream in) throws IOException {");
         for (Field field : fields) {
-            String init = field instanceof Field.Singular s && !s.presence() ? s.value().defaultValue() : "null";
+            String init = field instanceof Field.Singular s && !s.presence() ? s.value().wire().defaultValue() : "null";
             w.line(localType(field) + " " + field.local() + " = " + init + ";");
         }
         w.line("int tag;");
@@ -103,7 +129,7 @@ final class CodecWriter {
         for (Field field : fields) {
             if (field instanceof Field.Singular s) {
                 w.line("case " + tag(s.number(), s.value().wireType()) + " -> " + s.local() + " = "
-                    + s.value().read() + "; // " + s.protoName());
+                    + s.value().wire().read() + "; // " + s.protoName());
             } else if (field instanceof Field.Repeated r) {
                 decodeRepeated(r);
             } else if (field instanceof Field.MapField m) {
@@ -124,7 +150,8 @@ final class CodecWriter {
             w.open("return new " + recordType + "(");
             for (int i = 0; i < fields.size(); i++) {
                 Field field = fields.get(i);
-                w.line(field.local() + (i < fields.size() - 1 ? "," : ""));
+                String arg = field instanceof Field.Singular s ? s.constructorArg() : field.local();
+                w.line(arg + (i < fields.size() - 1 ? "," : ""));
             }
             w.close(");");
         }
@@ -133,7 +160,7 @@ final class CodecWriter {
 
     /** Repeated and map locals stay null until the first element, so an absent field allocates nothing. */
     private String localType(Field field) {
-        if (field instanceof Field.Singular s) return s.presence() ? s.value().boxedType() : s.value().type();
+        if (field instanceof Field.Singular s) return s.localType();
         return field.type();
     }
 
@@ -160,19 +187,19 @@ final class CodecWriter {
         w.open("case " + tag(field.number(), LENGTH_DELIMITED) + " -> { // " + field.protoName());
         w.line("int length = in.readRawVarint32();");
         w.line("int limit = in.pushLimit(length);");
-        w.line(field.key().type() + " key = " + field.key().defaultValue() + ";");
-        w.line(field.value().type() + " val = " + field.value().defaultValue() + ";");
+        w.line(field.key().wire().type() + " key = " + field.key().wire().defaultValue() + ";");
+        w.line(field.value().wire().type() + " val = " + field.value().wire().defaultValue() + ";");
         w.line("int entryTag;");
         w.open("while ((entryTag = in.readTag()) != 0) {");
         w.open("switch (entryTag) {");
-        w.line("case " + tag(1, field.key().wireType()) + " -> key = " + field.key().read() + ";");
-        w.line("case " + tag(2, field.value().wireType()) + " -> val = " + field.value().read() + ";");
+        w.line("case " + tag(1, field.key().wireType()) + " -> key = " + field.key().wire().read() + ";");
+        w.line("case " + tag(2, field.value().wireType()) + " -> val = " + field.value().wire().read() + ";");
         w.line("default -> in.skipField(entryTag);");
         w.close();
         w.close();
         w.line("in.popLimit(limit);");
         w.line("if (" + map + " == null) " + map + " = new java.util.LinkedHashMap<>();");
-        w.line(map + ".put(key, val);");
+        w.line(map + ".put(" + field.key().fromWire("key") + ", " + field.value().fromWire("val") + ");");
         w.close();
     }
 
@@ -192,8 +219,8 @@ final class CodecWriter {
             w.open("{ // " + field.protoName());
             w.line(field.type() + " x = value." + field.name() + "();");
             if (field instanceof Field.Singular s) {
-                String condition = s.presence() ? "x != null" : s.value().isSet("x");
-                w.line("if (" + condition + ") " + s.value().write(s.number(), "x") + ";");
+                String variable = singularVar(s);
+                w.line("if (" + singularCondition(s) + ") " + s.value().wire().write(s.number(), variable) + ";");
             } else if (field instanceof Field.Repeated r && r.packed() && r.element().packable()) {
                 w.open("if (!x.isEmpty()) {");
                 w.line("int dataSize = 0;");
@@ -208,12 +235,11 @@ final class CodecWriter {
             } else if (field instanceof Field.MapField m) {
                 w.open("for (java.util.Map.Entry<" + m.key().boxedType() + ", " + m.value().boxedType()
                     + "> e : x.entrySet()) {");
-                w.line(m.key().boxedType() + " key = e.getKey();");
-                w.line(m.value().boxedType() + " val = e.getValue();");
+                mapEntryLocals(m);
                 w.line("out.writeTag(" + m.number() + ", " + LENGTH_DELIMITED + ");");
                 w.line("out.writeUInt32NoTag(sizes.next());");
-                w.line(m.key().write(1, "key") + ";");
-                w.line("if (val != null) " + m.value().write(2, "val") + ";");
+                w.line(m.key().wire().write(1, "key") + ";");
+                w.line("if (val != null) " + m.value().wire().write(2, "val") + ";");
                 w.close();
             } else if (field instanceof Field.Oneof o) {
                 // a oneof member is set by construction, so it is written even when it holds the default value
@@ -238,8 +264,8 @@ final class CodecWriter {
             w.open("{ // " + field.protoName());
             w.line(field.type() + " x = value." + field.name() + "();");
             if (field instanceof Field.Singular s) {
-                String condition = s.presence() ? "x != null" : s.value().isSet("x");
-                w.line("if (" + condition + ") size += " + s.value().size(s.number(), "x") + ";");
+                String sizeExpr = s.value().wire().size(s.number(), singularVar(s));
+                w.line("if (" + singularCondition(s) + ") size += " + sizeExpr + ";");
             } else if (field instanceof Field.Repeated r && r.packed() && r.element().packable()) {
                 w.open("if (!x.isEmpty()) {");
                 w.line("int dataSize = 0;");
@@ -254,11 +280,10 @@ final class CodecWriter {
             } else if (field instanceof Field.MapField m) {
                 w.open("for (java.util.Map.Entry<" + m.key().boxedType() + ", " + m.value().boxedType()
                     + "> e : x.entrySet()) {");
-                w.line(m.key().boxedType() + " key = e.getKey();");
-                w.line(m.value().boxedType() + " val = e.getValue();");
+                mapEntryLocals(m);
                 w.line("int slot = sizes.reserve();");
-                w.line("int entrySize = " + m.key().size(1, "key") + " + (val != null ? " + m.value().size(2, "val")
-                    + " : 0);");
+                w.line("int entrySize = " + m.key().wire().size(1, "key") + " + (val != null ? "
+                    + m.value().wire().size(2, "val") + " : 0);");
                 w.line("sizes.set(slot, entrySize);");
                 w.line("size += CodedOutputStream.computeTagSize(" + m.number()
                     + ") + CodedOutputStream.computeUInt32SizeNoTag(entrySize) + entrySize;");
@@ -281,6 +306,39 @@ final class CodecWriter {
             Field.Oneof.Case member = oneof.cases().get(i);
             String prefix = i == 0 ? "if" : "else if";
             w.line(prefix + " (x instanceof " + member.type() + " c) " + body.apply(member));
+        }
+    }
+
+    /**
+     * Declares {@code w}, the wire-side value of a converted singular field, after {@code x}; returns the
+     * variable the write and size fragments should use.
+     */
+    private String singularVar(Field.Singular field) {
+        Value value = field.value();
+        if (value.wire() == value) return "x";
+        w.line(value.wire().boxedType() + " w = x == null ? null : " + value.toWire("x") + ";");
+        return "w";
+    }
+
+    private static String singularCondition(Field.Singular field) {
+        Value value = field.value();
+        if (field.presence()) return value.wire() == value ? "x != null" : "w != null";
+        if (value.wire() == value) return value.isSet("x");
+        Value wire = value.wire();
+        // a reference-typed wire value tolerates null in its own check; a boxed primitive needs the guard
+        boolean reference = wire.type().equals(wire.boxedType());
+        return reference ? wire.isSet("w") : "w != null && " + wire.isSet("w");
+    }
+
+    /** Declares {@code key} and {@code val} for a map entry {@code e}, converted once. */
+    private void mapEntryLocals(Field.MapField field) {
+        w.line(field.key().wire().boxedType() + " key = " + field.key().toWire("e.getKey()") + ";");
+        Value value = field.value();
+        if (value.wire() == value) {
+            w.line(value.boxedType() + " val = e.getValue();");
+        } else {
+            w.line(value.boxedType() + " raw = e.getValue();");
+            w.line(value.wire().boxedType() + " val = raw == null ? null : " + value.toWire("raw") + ";");
         }
     }
 
