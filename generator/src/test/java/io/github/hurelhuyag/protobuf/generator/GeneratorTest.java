@@ -61,6 +61,7 @@ class GeneratorTest {
                 "demo/Uuid.java", "demo/UuidProtoCodec.java",
                 "demo/Point.java", "demo/PointProtoCodec.java",
                 "demo/Tree.java", "demo/TreeProtoCodec.java",
+                "demo/Segment.java", "demo/SegmentProtoCodec.java",
                 "demo/Everything.java", "demo/EverythingProtoCodec.java", "demo/Everything_NestedProtoCodec.java"
             ),
             List.copyOf(sources.keySet())
@@ -112,6 +113,31 @@ class GeneratorTest {
     void aMessageOfDefaultsIsEmptyOnTheWire() throws Exception {
         assertEquals(0, bytes("encodeEmpty").length);
         assertEquals(Boolean.TRUE, compilation.call("demo.Driver", "nullCollectionsBecomeEmpty", new Class<?>[0]));
+    }
+
+    /** Every singular field without {@code optional} is required: the record cannot be built holding null. */
+    @Test
+    void nonOptionalFieldsRejectNull() throws Exception {
+        assertEquals("demo.Tree.name is not optional", compilation.call(
+            "demo.Driver", "rejectNull", new Class<?>[]{String.class}, "string"
+        ));
+        assertEquals("demo.Everything.Nested.kind is not optional", compilation.call(
+            "demo.Driver", "rejectNull", new Class<?>[]{String.class}, "enum"
+        ));
+        assertEquals("demo.Segment.start is not optional", compilation.call(
+            "demo.Driver", "rejectNull", new Class<?>[]{String.class}, "message"
+        ));
+        assertEquals("demo.Everything.color is not optional", compilation.call(
+            "demo.Driver", "rejectNull", new Class<?>[]{String.class}, "everything"
+        ));
+    }
+
+    @Test
+    void aMissingRequiredMessageFieldFailsDecoding() throws Exception {
+        assertEquals(
+            "demo.Segment.start is not optional",
+            compilation.call("demo.Driver", "decodeEmptySegment", new Class<?>[0])
+        );
     }
 
     /** A oneof member is set by construction, so it is written even when it carries the type's default value. */

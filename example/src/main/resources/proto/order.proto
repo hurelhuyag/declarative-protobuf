@@ -40,12 +40,13 @@ message Line {
   int64 unit_price_cents = 3;
 }
 
+// Every singular field without `optional` is required: the generated constructor refuses null for it.
 message Order {
   Uuid id = 1;
   string customer = 2;
   Status status = 3;
   google.protobuf.Timestamp created_at = 4;
-  Address shipping = 5;
+  optional Address shipping = 5;
   repeated Line lines = 6;
   map<string, string> attributes = 7;
   optional int32 discount_percent = 8;

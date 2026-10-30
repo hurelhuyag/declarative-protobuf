@@ -13,6 +13,7 @@ message Order {
   string customer = 2;
   Status status = 3;
   google.protobuf.Timestamp created_at = 4;
+  optional Address shipping = 5;
   repeated Line lines = 6;
   map<string, string> attributes = 7;
   optional int32 discount_percent = 8;
@@ -27,15 +28,25 @@ becomes
 
 ```java
 public record Order(
-    Uuid id,                          // absent = null
+    Uuid id,                          // required: the constructor refuses null
     String customer,
     Status status,
     Instant createdAt,                // google.protobuf.Timestamp
+    Address shipping,                 // optional: null = absent
     List<Line> lines,                 // never null
     Map<String, String> attributes,
     Integer discountPercent,          // optional: null = absent
     Order.Payment payment             // oneof: null, or exactly one case
 ) {
+    public Order {
+        Objects.requireNonNull(id, "example.orders.Order.id is not optional");
+        Objects.requireNonNull(customer, "example.orders.Order.customer is not optional");
+        Objects.requireNonNull(status, "example.orders.Order.status is not optional");
+        Objects.requireNonNull(createdAt, "example.orders.Order.created_at is not optional");
+        if (lines == null) lines = List.of();
+        if (attributes == null) attributes = Map.of();
+    }
+
     public sealed interface Payment {
         record CardToken(String value) implements Payment {}
         record InvoiceRef(String value) implements Payment {}
@@ -66,14 +77,15 @@ is enough, and the choice is the lossless one in every case.
 | `float` `double` `bool` `string` | `float` `double` `boolean` `String` |
 | `bytes` | `ByteBuffer`, read-only on decode, compared by content |
 | `optional T` (explicit presence) | the boxed type; `null` = absent |
-| message field | the generated record; `null` = absent |
+| message field | the generated record; required, the constructor refuses `null` |
+| `optional` message field | the generated record; `null` = absent |
 | `repeated T` | `List<T>`, never null — an absent field is `List.of()` |
 | `map<K, V>` | `Map<K, V>`, never null |
 | enum | a generated enum plus `UNRECOGNIZED`, with `number()` / `forNumber(int)` on it |
 | `oneof` | a nested **sealed interface** with one record per member |
 | nested message / enum | a record or enum nested inside the outer record, as the schema nests it |
 | `google.protobuf.Timestamp` / `Duration` | `Instant` / `java.time.Duration` |
-| `google.protobuf.*Value` wrappers | the boxed Java type, `null` = absent |
+| `google.protobuf.*Value` wrappers | the boxed Java type; `null` = absent when the field is `optional` |
 | anything with `(declarative.java)` | the Java type you named, through your converter — see below |
 
 Names follow protoc: `java_package` (or the proto package) for the package, `json_name` — lowerCamelCase — for
@@ -190,6 +202,11 @@ the api dependency — the two must not share a classpath.
 
 - Unknown fields are skipped; they are not preserved on re-encode.
 - Repeated scalars are written packed and read in either form.
+- Every singular field without `optional` is required: the canonical constructor throws `NullPointerException`
+  naming the schema field (`example.orders.Order.id is not optional`) when it is given `null`, so a record that
+  would be an invalid message cannot be built. Strings, bytes and enums decode to their defaults when absent, so
+  only a missing message field can trip it on decode — and it does: proto3 has no `required`, so a peer that
+  omits such a field (or predates it) produces bytes this side refuses. Mark the field `optional` to accept that.
 - Absent repeated and map fields decode to `List.of()` / `Map.of()`, and the canonical constructor normalises
   `null` collections to empty ones, so those components are never null.
 - An enum value this build does not know decodes to `UNRECOGNIZED`; encoding it throws `IllegalArgumentException`.

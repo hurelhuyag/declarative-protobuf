@@ -19,6 +19,7 @@ final class Sources {
         "java.util.Map", "Map",
         "java.util.ArrayList", "ArrayList",
         "java.util.LinkedHashMap", "LinkedHashMap",
+        "java.util.Objects", "Objects",
         "java.nio.ByteBuffer", "ByteBuffer",
         "java.time.Instant", "Instant",
         "java.time.Duration", "Duration"

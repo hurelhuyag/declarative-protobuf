@@ -28,8 +28,10 @@ import com.google.protobuf.WrappersProto;
  * enum Color { COLOR_UNSPECIFIED = 0; RED = 1; GREEN = 2; }
  * message Point { int32 x = 1; int32 y = 2; }
  * message Tree { string name = 1; repeated Tree children = 2; }
+ * message Segment { Point start = 1; Point end = 2; }
  * message Everything {
- *   // every scalar type, then optional, enum, message, repeated, map, oneof, well-known types and a nested type
+ *   // every scalar type, then optional, enum, message, repeated, map, oneof, well-known types and a nested type;
+ *   // the message fields are all optional, so that a message of defaults is empty
  *   ...
  *   oneof shape { string label = 27; int32 radius = 28; Point center = 29; }
  *   message Nested { enum Kind { KIND_UNSPECIFIED = 0; A = 1; } int32 n = 1; Kind kind = 2; }
@@ -61,6 +63,9 @@ final class TestSchema {
         .addMessageType(DescriptorProto.newBuilder().setName("Tree")
             .addField(field("name", 1, Type.TYPE_STRING))
             .addField(message("children", 2, ".demo.Tree").setLabel(Label.LABEL_REPEATED)))
+        .addMessageType(DescriptorProto.newBuilder().setName("Segment")
+            .addField(message("start", 1, ".demo.Point"))
+            .addField(message("end", 2, ".demo.Point")))
         .addMessageType(DescriptorProto.newBuilder().setName("Everything")
             .addField(field("double_value", 1, Type.TYPE_DOUBLE))
             .addField(field("float_value", 2, Type.TYPE_FLOAT))
@@ -80,8 +85,8 @@ final class TestSchema {
             .addField(field("opt_int32", 16, Type.TYPE_INT32).setProto3Optional(true).setOneofIndex(1))
             .addField(field("opt_string", 17, Type.TYPE_STRING).setProto3Optional(true).setOneofIndex(2))
             .addField(message("color", 18, ".demo.Color").setType(Type.TYPE_ENUM))
-            .addField(message("point", 19, ".demo.Point"))
-            .addField(message("tree", 20, ".demo.Tree"))
+            .addField(message("point", 19, ".demo.Point").setProto3Optional(true).setOneofIndex(3))
+            .addField(message("tree", 20, ".demo.Tree").setProto3Optional(true).setOneofIndex(4))
             .addField(field("ints", 21, Type.TYPE_INT32).setLabel(Label.LABEL_REPEATED))
             .addField(field("strings", 22, Type.TYPE_STRING).setLabel(Label.LABEL_REPEATED))
             .addField(message("points", 23, ".demo.Point").setLabel(Label.LABEL_REPEATED))
@@ -91,11 +96,11 @@ final class TestSchema {
             .addField(field("label", 27, Type.TYPE_STRING).setOneofIndex(0))
             .addField(field("radius", 28, Type.TYPE_INT32).setOneofIndex(0))
             .addField(message("center", 29, ".demo.Point").setOneofIndex(0))
-            .addField(message("created_at", 30, ".google.protobuf.Timestamp"))
-            .addField(message("ttl", 31, ".google.protobuf.Duration"))
-            .addField(message("maybe", 32, ".google.protobuf.Int32Value"))
-            .addField(message("nested", 33, ".demo.Everything.Nested"))
-            .addField(message("request_id", 34, ".demo.Uuid"))
+            .addField(message("created_at", 30, ".google.protobuf.Timestamp").setProto3Optional(true).setOneofIndex(5))
+            .addField(message("ttl", 31, ".google.protobuf.Duration").setProto3Optional(true).setOneofIndex(6))
+            .addField(message("maybe", 32, ".google.protobuf.Int32Value").setProto3Optional(true).setOneofIndex(7))
+            .addField(message("nested", 33, ".demo.Everything.Nested").setProto3Optional(true).setOneofIndex(8))
+            .addField(message("request_id", 34, ".demo.Uuid").setProto3Optional(true).setOneofIndex(9))
             .addField(message("related_ids", 35, ".demo.Uuid").setLabel(Label.LABEL_REPEATED))
             .addField(field("created_millis", 36, Type.TYPE_INT64)
                 .setOptions(FieldOptions.newBuilder().setUnknownFields(
@@ -104,6 +109,13 @@ final class TestSchema {
             .addOneofDecl(OneofDescriptorProto.newBuilder().setName("shape"))
             .addOneofDecl(OneofDescriptorProto.newBuilder().setName("_opt_int32"))
             .addOneofDecl(OneofDescriptorProto.newBuilder().setName("_opt_string"))
+            .addOneofDecl(OneofDescriptorProto.newBuilder().setName("_point"))
+            .addOneofDecl(OneofDescriptorProto.newBuilder().setName("_tree"))
+            .addOneofDecl(OneofDescriptorProto.newBuilder().setName("_created_at"))
+            .addOneofDecl(OneofDescriptorProto.newBuilder().setName("_ttl"))
+            .addOneofDecl(OneofDescriptorProto.newBuilder().setName("_maybe"))
+            .addOneofDecl(OneofDescriptorProto.newBuilder().setName("_nested"))
+            .addOneofDecl(OneofDescriptorProto.newBuilder().setName("_request_id"))
             .addNestedType(mapEntry("CountsEntry", field("key", 1, Type.TYPE_STRING),
                 field("value", 2, Type.TYPE_INT32)))
             .addNestedType(mapEntry("PointsByIdEntry", field("key", 1, Type.TYPE_INT64),

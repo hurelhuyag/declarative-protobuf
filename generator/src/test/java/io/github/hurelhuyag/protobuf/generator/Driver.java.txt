@@ -45,7 +45,7 @@ public final class Driver {
             0d, 0f, 0, 0L, 0, 0L, 0, 0L, 0, 0L, 0, 0L, false, "", ByteBuffer.allocate(0),
             null, null, color, null, null,
             List.of(), List.of(), List.of(), List.of(), Map.of(), Map.of(),
-            shape, null, null, null, null, null, null, null, null
+            shape, null, null, null, null, null, null, Instant.EPOCH, null
         );
     }
 
@@ -98,9 +98,34 @@ public final class Driver {
             0d, 0f, 0, 0L, 0, 0L, 0, 0L, 0, 0L, 0, 0L, false, "", ByteBuffer.allocate(0),
             null, null, Color.COLOR_UNSPECIFIED, null, null,
             null, null, null, null, null, null,
-            null, null, null, null, null, null, null, null, null
+            null, null, null, null, null, null, null, Instant.EPOCH, null
         );
         return value.ints().isEmpty() && value.counts().isEmpty() && JavaProtobuf.encode(value).length == 0;
+    }
+
+    /** A null where the schema has no {@code optional} is refused, naming the field. */
+    public static String rejectNull(String which) {
+        try {
+            switch (which) {
+                case "string" -> new Tree(null, List.of());
+                case "enum" -> new Everything.Nested(0, null);
+                case "message" -> new Segment(null, new Point(0, 0));
+                default -> of(null, null);
+            }
+            return "no exception";
+        } catch (NullPointerException e) {
+            return e.getMessage();
+        }
+    }
+
+    /** A required message field missing on the wire makes the decoded message invalid too. */
+    public static String decodeEmptySegment() throws Exception {
+        try {
+            JavaProtobuf.decode(new byte[0], Segment.class);
+            return "no exception";
+        } catch (NullPointerException e) {
+            return e.getMessage();
+        }
     }
 
     /** The schema said UUID; the record says UUID, and the wire still carries two fixed64s. */

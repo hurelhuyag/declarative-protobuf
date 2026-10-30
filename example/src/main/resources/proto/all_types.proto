@@ -77,13 +77,14 @@ message Outer {
 }
 
 message Everything {
-  // embedded messages: nullable, null = absent
+  // embedded messages: required, the constructor refuses null
   Scalars scalars = 1;
   OptionalScalars optionals = 2;
   Point point = 3;
   Tree tree = 4;
   Outer outer = 5;
   Outer.Inner inner = 6;
+  optional Point maybe_point = 40; // optional: nullable, null = absent
 
   // enums
   Color color = 7;
@@ -115,18 +116,19 @@ message Everything {
     Color tint = 26;
   }
 
-  // well-known types map to java.time and boxed types instead of generated records
+  // well-known types map to java.time and boxed types instead of generated records; a wrapper is only nullable
+  // when it is optional, like any other message field
   google.protobuf.Timestamp created_at = 27;
   google.protobuf.Duration ttl = 28;
-  google.protobuf.DoubleValue maybe_double = 29;
-  google.protobuf.FloatValue maybe_float = 30;
-  google.protobuf.Int64Value maybe_long = 31;
-  google.protobuf.UInt64Value maybe_unsigned_long = 32;
-  google.protobuf.Int32Value maybe_int = 33;
-  google.protobuf.UInt32Value maybe_unsigned_int = 34;
-  google.protobuf.BoolValue maybe_bool = 35;
-  google.protobuf.StringValue maybe_string = 36;
-  google.protobuf.BytesValue maybe_bytes = 37;
+  optional google.protobuf.DoubleValue maybe_double = 29;
+  optional google.protobuf.FloatValue maybe_float = 30;
+  optional google.protobuf.Int64Value maybe_long = 31;
+  optional google.protobuf.UInt64Value maybe_unsigned_long = 32;
+  optional google.protobuf.Int32Value maybe_int = 33;
+  optional google.protobuf.UInt32Value maybe_unsigned_int = 34;
+  optional google.protobuf.BoolValue maybe_bool = 35;
+  optional google.protobuf.StringValue maybe_string = 36;
+  optional google.protobuf.BytesValue maybe_bytes = 37;
   repeated google.protobuf.Timestamp timestamps = 38;
   map<string, google.protobuf.Duration> durations = 39;
 }

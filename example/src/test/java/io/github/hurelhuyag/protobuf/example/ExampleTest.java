@@ -9,9 +9,11 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExampleTest {
@@ -29,15 +31,15 @@ class ExampleTest {
         assertEquals(Main.sample(), JavaProtobuf.decode(new ByteArrayInputStream(out.toByteArray()), Order.class));
     }
 
-    /** Absent fields come back as null (presence) or empty (collections), never as a surprise. */
+    /** Absent fields come back as null (optional) or empty (collections), never as a surprise. */
     @Test
     void absentFields() throws IOException {
-        Order empty = new Order(null, "", Status.STATUS_UNSPECIFIED, null, null, null, null, null, null);
-        byte[] bytes = JavaProtobuf.encode(empty);
-        assertEquals(0, bytes.length);
-
-        Order decoded = JavaProtobuf.decode(bytes, Order.class);
-        assertNull(decoded.id());
+        Order minimal = new Order(
+            new UUID(0, 0), "", Status.STATUS_UNSPECIFIED, Instant.EPOCH, null, null, null, null, null
+        );
+        Order decoded = JavaProtobuf.decode(JavaProtobuf.encode(minimal), Order.class);
+        assertEquals(minimal, decoded);
+        assertNull(decoded.shipping());
         assertNull(decoded.discountPercent());
         assertNull(decoded.payment());
         assertEquals("", decoded.customer());
@@ -46,11 +48,29 @@ class ExampleTest {
         assertEquals(Map.of(), decoded.attributes());
     }
 
+    /** A field without {@code optional} is required: the record cannot be built without it. */
+    @Test
+    void requiredFieldRejectsNull() {
+        NullPointerException e = assertThrows(NullPointerException.class, () -> new Order(
+            null, "ann", Status.NEW, Instant.EPOCH, null, List.of(), Map.of(), null, null
+        ));
+        assertEquals("example.orders.Order.id is not optional", e.getMessage());
+    }
+
+    /** Bytes missing a required message field do not decode into a record that breaks its own schema. */
+    @Test
+    void requiredFieldMissingOnTheWire() {
+        NullPointerException e = assertThrows(NullPointerException.class, () -> JavaProtobuf.decode(
+            new byte[0], Order.class
+        ));
+        assertEquals("example.orders.Order.id is not optional", e.getMessage());
+    }
+
     /** The oneof is a sealed interface: a value carries which member is set, and cannot carry two. */
     @Test
     void oneofIsASealedInterface() throws IOException {
         Order invoice = new Order(
-            null, "bob", Status.NEW, Instant.EPOCH, null, List.of(), Map.of(), null,
+            new UUID(0, 7), "bob", Status.NEW, Instant.EPOCH, null, List.of(), Map.of(), null,
             new Order.Payment.InvoiceRef("INV-7")
         );
         Order decoded = JavaProtobuf.decode(JavaProtobuf.encode(invoice), Order.class);
@@ -62,7 +82,9 @@ class ExampleTest {
     /** An enum value this build does not know decodes to UNRECOGNIZED instead of failing. */
     @Test
     void unknownEnumValue() throws IOException {
-        byte[] bytes = {(byte) 0x18, (byte) 0x63}; // field 3 (status), varint 99
-        assertEquals(Status.UNRECOGNIZED, JavaProtobuf.decode(bytes, Order.class).status());
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        JavaProtobuf.encode(bytes, Main.sample());
+        bytes.write(new byte[]{(byte) 0x18, (byte) 0x63}); // field 3 (status), varint 99: the last value wins
+        assertEquals(Status.UNRECOGNIZED, JavaProtobuf.decode(bytes.toByteArray(), Order.class).status());
     }
 }

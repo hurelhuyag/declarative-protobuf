@@ -9,7 +9,7 @@ public final class MillisConverter implements ProtoConverter<Long, Instant> {
 
     @Override
     public Instant fromWire(Long wire) {
-        return wire == 0L ? null : Instant.ofEpochMilli(wire);
+        return Instant.ofEpochMilli(wire);
     }
 
     @Override

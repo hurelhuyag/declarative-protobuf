@@ -66,14 +66,29 @@ final class RecordWriter {
         w.close();
     }
 
-    /** Normalises absent collections to empty ones, so a component of a list or map type is never null. */
+    /**
+     * Rejects null for every singular field the schema did not mark {@code optional}, so a record that would be an
+     * invalid message cannot be built, and normalises absent collections to empty ones, so a component of a list
+     * or map type is never null. A primitive cannot be null; a field with presence but no {@code optional} keyword
+     * is a message field, and is required like any other.
+     */
     private void compactConstructor(Descriptor message, List<Field> fields) {
+        List<Field.Singular> required = fields.stream()
+            .filter(Field.Singular.class::isInstance)
+            .map(Field.Singular.class::cast)
+            .filter(field -> !field.descriptor().toProto().getProto3Optional())
+            .filter(field -> field.presence() || field.value().type().equals(field.value().boxedType()))
+            .toList();
         List<Field> collections = fields.stream()
             .filter(field -> field instanceof Field.Repeated || field instanceof Field.MapField)
             .toList();
-        if (collections.isEmpty()) return;
+        if (required.isEmpty() && collections.isEmpty()) return;
         w.line("");
         w.open("public " + message.getName() + " {");
+        for (Field.Singular field : required) {
+            w.line("java.util.Objects.requireNonNull(" + field.name() + ", \"" + field.descriptor().getFullName()
+                + " is not optional\");");
+        }
         for (Field field : collections) {
             String empty = field instanceof Field.Repeated ? "java.util.List.of()" : "java.util.Map.of()";
             w.line("if (" + field.name() + " == null) " + field.name() + " = " + empty + ";");
