@@ -15,6 +15,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -192,6 +193,53 @@ class GeneratorTest {
         assertEquals("radius:42", compilation.call(
             "demo.Driver", "describeShape", new Class<?>[]{byte[].class}, (Object) message.toByteArray()
         ));
+    }
+
+    /** Interfaces and annotations the build asks for land on the matching records, nested ones included. */
+    @Test
+    void customizationsFromTheBuild(@TempDir Path customized) throws Exception {
+        Map<String, String> generated = Generator.generate(
+            TestSchema.set(), List.of("demo.proto"), null, new Customizations(
+                List.of(
+                    new Customizations.Rule("demo.Tree", "demo.Named"),
+                    new Customizations.Rule("demo.Point", "java.io.Serializable")
+                ),
+                List.of(new Customizations.Rule("demo.*", "demo.Marker"))
+            )
+        );
+        Path sourceDirectory = customized.resolve("generated");
+        for (Map.Entry<String, String> source : generated.entrySet()) {
+            Path file = sourceDirectory.resolve(source.getKey());
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, source.getValue());
+        }
+        Files.writeString(
+            sourceDirectory.resolve("demo/Named.java"), "package demo; public interface Named { String name(); }"
+        );
+        Files.writeString(sourceDirectory.resolve("demo/Marker.java"), "package demo; public @interface Marker {}");
+        for (String handWritten : List.of("UuidConverter", "MillisConverter")) {
+            Files.copy(
+                Path.of("src/test/java/io/github/hurelhuyag/protobuf/generator/" + handWritten + ".java.txt"),
+                sourceDirectory.resolve("demo/" + handWritten + ".java")
+            );
+        }
+        Compilation compiled = Compilation.compile(sourceDirectory, customized.resolve("classes"));
+        assertTrue(compiled.success(), compiled.messages());
+
+        assertTrue(generated.get("demo/Tree.java").contains(") implements Named {"), generated.get("demo/Tree.java"));
+        assertTrue(generated.get("demo/Point.java").contains("import java.io.Serializable;"));
+        assertTrue(generated.get("demo/Point.java").contains(") implements Serializable {"));
+        assertTrue(generated.get("demo/Everything.java").contains("    @Marker\n    public record Nested("));
+    }
+
+    @Test
+    void aCustomizationThatMatchesNothingFailsTheBuild() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Generator.generate(
+            TestSchema.set(), List.of("demo.proto"), null, new Customizations(
+                List.of(new Customizations.Rule("demo.Pointt", "java.io.Serializable")), List.of()
+            )
+        ));
+        assertEquals("'demo.Pointt' (for java.io.Serializable) matches no generated message", e.getMessage());
     }
 
     @Test

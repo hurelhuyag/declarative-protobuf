@@ -17,8 +17,16 @@ import java.util.stream.Stream;
 /**
  * Two ways to run the generator:
  * <ul>
- *   <li>{@code java -jar generator.jar <descriptor-set.pb> <output-dir> [proto-file...]} — reads a descriptor set
- *       written by {@code protoc --descriptor_set_out=... --include_imports} and writes sources to a directory;</li>
+ *   <li>{@code java -jar generator.jar [option...] <descriptor-set.pb> <output-dir> [proto-file...]} — reads a
+ *       descriptor set written by {@code protoc --descriptor_set_out=... --include_imports} and writes sources to a
+ *       directory. The options, each but the first repeatable:
+ *       <ul>
+ *         <li>{@code --package=<java package>} puts everything generated in one package;</li>
+ *         <li>{@code --implements=<message pattern>=<interface>} adds an interface to matching records;</li>
+ *         <li>{@code --annotate=<message pattern>=<annotation>} adds a marker annotation to matching records.</li>
+ *       </ul>
+ *       A message pattern is a full name ({@code example.orders.Order}), a prefix ending in {@code .*}, or
+ *       {@code *};</li>
  *   <li>with no arguments, as a protoc plugin: a {@code CodeGeneratorRequest} on stdin, a
  *       {@code CodeGeneratorResponse} on stdout, so {@code protoc --java-records_out=...} works directly.</li>
  * </ul>
@@ -31,28 +39,41 @@ public final class Main {
     public static void main(String[] args) throws Exception {
         List<String> rest = new java.util.ArrayList<>(List.of(args));
         String packageOverride = null;
+        List<Customizations.Rule> interfaces = new java.util.ArrayList<>();
+        List<Customizations.Rule> annotations = new java.util.ArrayList<>();
         for (java.util.Iterator<String> i = rest.iterator(); i.hasNext(); ) {
             String arg = i.next();
             if (arg.startsWith("--package=")) {
                 packageOverride = arg.substring("--package=".length());
-                i.remove();
+            } else if (arg.startsWith("--implements=")) {
+                interfaces.add(Customizations.Rule.parse("--implements", arg.substring("--implements=".length())));
+            } else if (arg.startsWith("--annotate=")) {
+                annotations.add(Customizations.Rule.parse("--annotate", arg.substring("--annotate=".length())));
+            } else {
+                continue;
             }
+            i.remove();
         }
         if (rest.isEmpty()) {
             plugin();
         } else if (rest.size() >= 2) {
-            cli(Path.of(rest.get(0)), Path.of(rest.get(1)), rest.subList(2, rest.size()), packageOverride);
+            cli(
+                Path.of(rest.get(0)), Path.of(rest.get(1)), rest.subList(2, rest.size()), packageOverride,
+                new Customizations(interfaces, annotations)
+            );
         } else {
-            System.err.println("usage: [--package=<java package>] <descriptor-set.pb> <output-dir> [proto-file...]");
+            System.err.println("usage: [--package=<java package>] [--implements=<message pattern>=<interface>]..."
+                + " [--annotate=<message pattern>=<annotation>]... <descriptor-set.pb> <output-dir> [proto-file...]");
             System.exit(2);
         }
     }
 
     private static void cli(
-        Path descriptorSet, Path outputDirectory, List<String> filesToGenerate, String packageOverride
+        Path descriptorSet, Path outputDirectory, List<String> filesToGenerate, String packageOverride,
+        Customizations customizations
     ) throws Exception {
         FileDescriptorSet set = FileDescriptorSet.parseFrom(Files.readAllBytes(descriptorSet));
-        Map<String, String> sources = Generator.generate(set, filesToGenerate, packageOverride);
+        Map<String, String> sources = Generator.generate(set, filesToGenerate, packageOverride, customizations);
         Set<Path> written = new HashSet<>();
         for (Map.Entry<String, String> source : sources.entrySet()) {
             Path file = outputDirectory.resolve(source.getKey());

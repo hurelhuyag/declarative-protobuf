@@ -88,6 +88,9 @@
                             <includePluginDependencies>true</includePluginDependencies>
                             <includeProjectDependencies>false</includeProjectDependencies>
                             <arguments>
+                                <!-- optional customizations: <message pattern>=<java type>, each repeatable -->
+                                <argument>--implements=example.orders.Order=io.github.hurelhuyag.protobuf.example.Identified</argument>
+                                <argument>--annotate=*=io.github.hurelhuyag.protobuf.example.WireRecord</argument>
                                 <argument>${project.build.directory}/generated/descriptors.pb</argument>
                                 <argument>${project.build.directory}/generated-sources/records</argument>
                             </arguments>

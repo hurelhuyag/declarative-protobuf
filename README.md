@@ -183,6 +183,34 @@ stdin and writes a `CodeGeneratorResponse` to stdout, so `protoc --java-records_
 wrapper script and no descriptor-set file at all. `--package=<name>` overrides `java_package` for everything
 generated, which is how `benchmark/` puts records and protoc's own classes side by side.
 
+### Interfaces and annotations from the build
+
+The schema is shared with other languages, so what only your Java code cares about can come from the build
+instead. Two repeatable arguments, each `<message pattern>=<java type>`:
+
+```xml
+<arguments>
+    <argument>--implements=example.orders.Order=com.acme.Identified</argument>
+    <argument>--annotate=*=com.acme.WireRecord</argument>
+    <argument>${project.build.directory}/generated/descriptors.pb</argument>
+    <argument>${project.build.directory}/generated-sources/records</argument>
+</arguments>
+```
+
+```java
+@WireRecord
+public record Order(UUID id, ...) implements Identified { ... }
+```
+
+A pattern is a message's schema full name (`example.orders.Order`), a package or enclosing message followed by
+`.*` for everything inside it, or `*` for every generated record; nested records are matched like top-level ones,
+and `--package` does not change the names patterns see. `--implements` takes any interface the record can
+satisfy — its accessors count, so `interface Identified { UUID id(); }` needs no code — and generic ones work
+(`com.acme.Keyed<java.util.UUID>`). `--annotate` takes marker annotations, which must allow `ElementType.TYPE`.
+A pattern that matches no generated message fails the build rather than doing nothing. The types are compiled
+with the generated sources, so they live in the consuming module or its dependencies. Both arguments are for the
+descriptor-set mode only; the protoc-plugin mode does not take them.
+
 Gradle works the same way: the `com.google.protobuf` plugin for the descriptor set, a `JavaExec` task for the
 generator, and `sourceSets.main.java.srcDir(...)` for the output. There is no annotation processor here, so none
 of the incremental-processing caveats from the other branch apply — the generator is an ordinary task with

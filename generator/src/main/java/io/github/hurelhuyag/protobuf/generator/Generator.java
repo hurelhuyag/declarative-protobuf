@@ -43,15 +43,18 @@ public final class Generator {
      */
     public static Map<String, String> generate(FileDescriptorSet set, Collection<String> filesToGenerate)
         throws DescriptorValidationException {
-        return generate(set, filesToGenerate, null);
+        return generate(set, filesToGenerate, null, Customizations.NONE);
     }
 
     /**
      * @param packageOverride Java package for everything generated, replacing each file's {@code java_package};
      *                        null to use the schema's own
+     * @param customizations  interfaces and annotations the build adds to generated records; every rule must match
+     *                        at least one of them
      */
     public static Map<String, String> generate(
-        FileDescriptorSet set, Collection<String> filesToGenerate, String packageOverride
+        FileDescriptorSet set, Collection<String> filesToGenerate, String packageOverride,
+        Customizations customizations
     ) throws DescriptorValidationException {
         Map<String, FileDescriptorProto> protos = new LinkedHashMap<>();
         for (FileDescriptorProto proto : set.getFileList()) {
@@ -59,14 +62,34 @@ public final class Generator {
         }
         Map<String, FileDescriptor> built = new HashMap<>();
         Map<String, String> sources = new LinkedHashMap<>();
+        List<String> records = new ArrayList<>();
         for (String name : protos.keySet()) {
             boolean wanted = filesToGenerate.isEmpty()
                 ? !name.startsWith(WELL_KNOWN_PREFIX) && !name.equals(OPTIONS_FILE)
                 : filesToGenerate.contains(name);
             FileDescriptor file = build(name, protos, built, new ArrayList<>());
-            if (wanted) generate(file, sources);
+            if (!wanted) continue;
+            generate(file, customizations, sources);
+            for (Descriptor message : file.getMessageTypes()) recordNames(message, records);
+        }
+        // a rule that matches nothing is a typo or a stale name; failing the build says so where silence would not
+        List<Customizations.Rule> rules = new ArrayList<>(customizations.interfaces());
+        rules.addAll(customizations.annotations());
+        for (Customizations.Rule rule : rules) {
+            if (records.stream().noneMatch(rule::matches)) {
+                throw new IllegalArgumentException("'" + rule.pattern() + "' (for " + rule.type()
+                    + ") matches no generated message");
+            }
         }
         return sources;
+    }
+
+    /** Full names of the records generated for a message: itself and its nested messages, but no map entries. */
+    private static void recordNames(Descriptor message, List<String> names) {
+        names.add(message.getFullName());
+        for (Descriptor nested : message.getNestedTypes()) {
+            if (!nested.getOptions().getMapEntry()) recordNames(nested, names);
+        }
     }
 
     private static FileDescriptorProto withPackage(FileDescriptorProto proto, String javaPackage) {
@@ -74,15 +97,18 @@ public final class Generator {
         return proto.toBuilder().setOptions(proto.getOptions().toBuilder().setJavaPackage(javaPackage)).build();
     }
 
-    private static void generate(FileDescriptor file, Map<String, String> sources) {
+    private static void generate(FileDescriptor file, Customizations customizations, Map<String, String> sources) {
         String packageName = Names.javaPackage(file);
         String directory = packageName.replace('.', '/');
-        Map<String, String> extra = importableConverterTypes(file);
+        Map<String, String> extra = importableTypes(file, customizations);
         for (EnumDescriptor enumType : file.getEnumTypes()) {
             put(sources, path(directory, enumType.getName()), EnumWriter.write(enumType), packageName, extra);
         }
         for (Descriptor message : file.getMessageTypes()) {
-            put(sources, path(directory, message.getName()), RecordWriter.write(message), packageName, extra);
+            put(
+                sources, path(directory, message.getName()), RecordWriter.write(message, customizations), packageName,
+                extra
+            );
             codecs(message, directory, packageName, extra, sources);
         }
     }
@@ -105,32 +131,33 @@ public final class Generator {
     }
 
     /**
-     * Types a converter introduced, ready to be imported: only those whose simple name cannot be confused with a
-     * type this file declares or with another converter's type.
+     * Types a converter or a customization introduced, ready to be imported: only those whose simple name cannot be
+     * confused with a type this file declares or with another introduced type.
      */
-    private static Map<String, String> importableConverterTypes(FileDescriptor file) {
+    private static Map<String, String> importableTypes(FileDescriptor file, Customizations customizations) {
         Set<String> declared = new HashSet<>();
         for (Descriptor message : file.getMessageTypes()) declared.add(message.getName());
         for (EnumDescriptor enumType : file.getEnumTypes()) declared.add(enumType.getName());
-        Map<String, Long> bySimpleName = converterTypes(file).stream()
+        Set<String> introduced = new TreeSet<>();
+        for (Descriptor message : file.getMessageTypes()) introducedTypes(message, customizations, introduced);
+        Map<String, Long> bySimpleName = introduced.stream()
             .collect(Collectors.groupingBy(Generator::simpleName, Collectors.counting()));
         Map<String, String> importable = new LinkedHashMap<>();
-        for (String type : converterTypes(file)) {
+        for (String type : introduced) {
             String simple = simpleName(type);
-            if (!declared.contains(simple) && bySimpleName.get(simple) == 1 && type.contains(".")) {
+            // a type of the file's own package needs no import: its prefix is dropped like any other's from there
+            boolean ownPackage = type.equals(Names.javaPackage(file) + "." + simple);
+            if (!declared.contains(simple) && bySimpleName.get(simple) == 1 && type.contains(".") && !ownPackage) {
                 importable.put(type, simple);
             }
         }
         return importable;
     }
 
-    private static Set<String> converterTypes(FileDescriptor file) {
-        Set<String> types = new TreeSet<>();
-        for (Descriptor message : file.getMessageTypes()) converterTypes(message, types);
-        return types;
-    }
-
-    private static void converterTypes(Descriptor message, Set<String> types) {
+    private static void introducedTypes(Descriptor message, Customizations customizations, Set<String> types) {
+        // a generic interface is imported by its raw name; its type arguments are left as written
+        for (String type : customizations.interfacesFor(message)) types.add(type.split("<", 2)[0]);
+        types.addAll(customizations.annotationsFor(message));
         for (Field field : TypeMapper.fields(message)) {
             if (field instanceof Field.Singular s) add(types, s.value());
             else if (field instanceof Field.Repeated r) add(types, r.element());
@@ -142,7 +169,7 @@ public final class Generator {
             }
         }
         for (Descriptor nested : message.getNestedTypes()) {
-            if (!nested.getOptions().getMapEntry()) converterTypes(nested, types);
+            if (!nested.getOptions().getMapEntry()) introducedTypes(nested, customizations, types);
         }
     }
 

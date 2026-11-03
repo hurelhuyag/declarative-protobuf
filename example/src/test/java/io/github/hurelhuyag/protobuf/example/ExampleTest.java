@@ -79,6 +79,17 @@ class ExampleTest {
         assertEquals("nothing yet", Main.describe(null));
     }
 
+    /** The build added an interface and an annotation that the schema knows nothing about. */
+    @Test
+    void customizedFromTheBuild() {
+        Identified identified = Main.sample();
+        assertEquals(UUID.fromString("123e4567-e89b-12d3-a456-426614174000"), identified.id());
+        assertTrue(Order.class.isAnnotationPresent(WireRecord.class));
+        assertTrue(io.github.hurelhuyag.protobuf.example.alltypes.Outer.Inner.class.isAnnotationPresent(
+            WireRecord.class
+        ));
+    }
+
     /** An enum value this build does not know decodes to UNRECOGNIZED instead of failing. */
     @Test
     void unknownEnumValue() throws IOException {

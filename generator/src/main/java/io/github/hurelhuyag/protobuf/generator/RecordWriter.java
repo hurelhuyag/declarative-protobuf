@@ -12,12 +12,14 @@ import java.util.List;
 final class RecordWriter {
 
     private final SourceWriter w = new SourceWriter();
+    private final Customizations customizations;
 
-    private RecordWriter() {
+    private RecordWriter(Customizations customizations) {
+        this.customizations = customizations;
     }
 
-    static String write(Descriptor message) {
-        RecordWriter writer = new RecordWriter();
+    static String write(Descriptor message, Customizations customizations) {
+        RecordWriter writer = new RecordWriter(customizations);
         String packageName = Names.javaPackage(message.getFile());
         if (!packageName.isEmpty()) writer.w.line("package " + packageName + ";").line("");
         writer.w.line("import javax.annotation.processing.Generated;");
@@ -35,9 +37,12 @@ final class RecordWriter {
         List<Field> fields = TypeMapper.fields(message);
         w.line("/** Generated from {@code " + message.getFullName() + "}. */");
         if (topLevel) w.line("@Generated(\"" + Generator.NAME + "\")");
+        for (String annotation : customizations.annotationsFor(message)) w.line("@" + annotation);
         String declaration = "public record " + message.getName() + "(";
+        List<String> interfaces = customizations.interfacesFor(message);
+        String body = (interfaces.isEmpty() ? "" : " implements " + String.join(", ", interfaces)) + " {";
         if (fields.isEmpty()) {
-            w.open(declaration + ") {");
+            w.open(declaration + ")" + body);
         } else {
             w.open(declaration);
             for (int i = 0; i < fields.size(); i++) {
@@ -47,7 +52,7 @@ final class RecordWriter {
                 String comment = field.name().equals(field.protoName()) ? "" : " // " + field.protoName();
                 w.line(type(field, message) + " " + field.name() + comma + comment);
             }
-            w.close(") {");
+            w.close(")" + body);
             w.indent();
         }
         compactConstructor(message, fields);
