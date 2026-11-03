@@ -38,6 +38,10 @@ jobs:
       - name: Build and test
         run: mvn -B --no-transfer-progress install
 
+      # the Gradle plugin is a Gradle build of its own; its functional tests take the generator from ~/.m2
+      - name: Build and test the Gradle plugin
+        run: ./gradlew --no-daemon --console=plain -p gradle-plugin build
+
       - name: Run the example
         run: >
           mvn -B -q --no-transfer-progress -pl example
@@ -55,7 +59,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: surefire-reports-jdk${{ matrix.java }}
-          path: '**/target/surefire-reports/*.xml'
+          path: |
+            **/target/surefire-reports/*.xml
+            gradle-plugin/build/test-results/**/*.xml
           if-no-files-found: ignore
 
   # A short JMH run against protoc-generated protobuf-java, so the numbers in the README can be reproduced.

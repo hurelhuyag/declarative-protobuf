@@ -16,6 +16,12 @@
         Maven wiring that runs protoc and the generator before javac.
     </description>
 
+    <!-- not published (see the central profile in the parent), so no sources or javadoc jar -->
+    <properties>
+        <maven.source.skip>true</maven.source.skip>
+        <maven.javadoc.skip>true</maven.javadoc.skip>
+    </properties>
+
     <dependencies>
         <!-- the only runtime dependency: the facade and the wire helpers the generated codecs call -->
         <dependency>

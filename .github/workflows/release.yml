@@ -1,0 +1,69 @@
+name: Release
+
+# Push a tag vX.Y.Z and this publishes X.Y.Z of the parent pom, declarative-protobuf-api and
+# declarative-protobuf-generator to Maven Central. The version in pom.xml stays a -SNAPSHOT in git; the tag is the
+# one place a release number is written, so the two cannot disagree.
+#
+# Repository secrets:
+#   CENTRAL_USERNAME, CENTRAL_PASSWORD  a user token from central.sonatype.com (Account > Generate User Token), for
+#                                       an account that has verified the io.github.hurelhuyag namespace
+#   GPG_PRIVATE_KEY                     gpg --armor --export-secret-keys <key id>, its public half on a keyserver
+#   GPG_PASSPHRASE                      that key's passphrase
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write   # the GitHub Release at the end
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # A version on Central can never be replaced or withdrawn, and the pom sets autoPublish. Give this environment a
+    # required reviewer in the repository settings to hold every tag for a manual approval before anything uploads.
+    environment: maven-central
+    steps:
+      - uses: actions/checkout@v5
+
+      # Writes a settings.xml with a "central" server whose credentials are read from the environment, and imports
+      # the key into the runner's keyring.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: maven
+          server-id: central
+          server-username: CENTRAL_USERNAME
+          server-password: CENTRAL_PASSWORD
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+
+      - name: Version from the tag
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::tag $GITHUB_REF_NAME is not vX.Y.Z"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          mvn -B --no-transfer-progress versions:set -DnewVersion="$version" -DgenerateBackupPoms=false
+
+      # One invocation: deploy runs the whole lifecycle, so a release that fails its tests is never uploaded. The
+      # example and benchmark are built and tested too, and left out of the upload by the central profile.
+      - name: Publish to Maven Central
+        run: mvn -B --no-transfer-progress -P central deploy
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" --title "$VERSION" --generate-notes
+          api/target/declarative-protobuf-api-"$VERSION".jar
+          generator/target/declarative-protobuf-generator-"$VERSION".jar

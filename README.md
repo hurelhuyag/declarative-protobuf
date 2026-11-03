@@ -211,10 +211,54 @@ A pattern that matches no generated message fails the build rather than doing no
 with the generated sources, so they live in the consuming module or its dependencies. Both arguments are for the
 descriptor-set mode only; the protoc-plugin mode does not take them.
 
-Gradle works the same way: the `com.google.protobuf` plugin for the descriptor set, a `JavaExec` task for the
-generator, and `sourceSets.main.java.srcDir(...)` for the output. There is no annotation processor here, so none
-of the incremental-processing caveats from the other branch apply — the generator is an ordinary task with
-declared inputs and outputs.
+## Gradle
+
+`gradle-plugin/` is a Gradle plugin that does what the three Maven steps do, for every source set:
+
+```kotlin
+plugins {
+    java
+    id("io.github.hurelhuyag.declarative-protobuf") version "0.1.0-SNAPSHOT"
+}
+
+declarativeProtobuf {
+    javaPackage = "com.acme.wire"                           // optional: --package
+    implement("example.orders.Order", "com.acme.Identified") // --implements
+    annotate("*", "com.acme.WireRecord")                     // --annotate
+}
+```
+
+`.proto` files go in `src/<sourceSet>/proto`. The plugin applies `com.google.protobuf` and has protoc write only a
+descriptor set (protoc's own Java classes would collide with the records by name), runs the generator on it as
+`generateRecords` / `generateTestRecords` into `build/generated/sources/records/<sourceSet>`, and adds that as a
+Java source directory. It adds the api jar to `implementation`, which also puts `declarative/options.proto` on
+protoc's import path, and defaults protoc to the protobuf version the api is built against; a
+`protobuf { protoc { artifact = ... } }` block overrides it. The generator runs in a JVM of its own, so its
+protobuf-java never meets the build's classpath, and the task is cacheable and configuration-cache safe.
+
+Only the current Gradle is supported — the plugin is built and tested with 9.8.2 and uses its APIs freely. The
+remaining deprecation warnings (`Configuration.setVisible`) come from `com.google.protobuf` 0.10.0, not from this
+plugin.
+
+The plugin is a Gradle build of its own, next to the Maven one, and takes its version from the root `pom.xml`.
+Its functional tests build real projects against the generator and api in `~/.m2`, so install those first:
+
+```sh
+mvn install
+./gradlew -p gradle-plugin build                 # plugin + TestKit functional tests
+./gradlew -p gradle-plugin publishToMavenLocal   # to try it from another build via mavenLocal()
+```
+
+A consumer resolving the plugin from `mavenLocal()` lists it in `settings.gradle.kts`:
+
+```kotlin
+pluginManagement {
+    repositories {
+        mavenLocal()
+        gradlePluginPortal()
+    }
+}
+```
 
 ## Runtime dependency: protobuf-javalite
 
@@ -290,3 +334,14 @@ to map — the same trade protoc's Java output makes, except these are immutable
 builders, and about a tenth of the generated code.
 
 The `master` branch keeps the annotation-based approach.
+
+## Releasing
+
+Push a tag `vX.Y.Z`. `.github/workflows/release.yml` sets that version, runs the full build with its tests, signs
+the artifacts and publishes the parent pom, `declarative-protobuf-api` and `declarative-protobuf-generator` to Maven
+Central. It then creates a GitHub Release for the tag. `pom.xml` stays a `-SNAPSHOT` in git. The example and the
+benchmark are built and tested but not published. The Gradle plugin is not released by this workflow.
+
+The repository needs the secrets `CENTRAL_USERNAME` and `CENTRAL_PASSWORD` (a user token from central.sonatype.com),
+`GPG_PRIVATE_KEY` and `GPG_PASSPHRASE`. A version on Central can never be replaced, so to approve each release by
+hand, give the `maven-central` environment a required reviewer.

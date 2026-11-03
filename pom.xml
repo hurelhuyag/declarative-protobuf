@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- the modules publish under the same url and scm as this pom, not one with their artifactId appended -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"
+         child.project.url.inherit.append.path="false">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.github.hurelhuyag</groupId>
@@ -10,6 +12,30 @@
 
     <name>declarative-protobuf</name>
     <description>Declarative protobuf codecs for Java records, generated at compile time from a descriptor set</description>
+    <url>https://github.com/hurelhuyag/declarative-protobuf</url>
+
+    <licenses>
+        <license>
+            <name>Apache License 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <name>Hurelhuyag</name>
+            <email>hurelhuyag@gmail.com</email>
+            <url>https://github.com/hurelhuyag</url>
+        </developer>
+    </developers>
+
+    <scm child.scm.connection.inherit.append.path="false" child.scm.developerConnection.inherit.append.path="false"
+         child.scm.url.inherit.append.path="false">
+        <url>https://github.com/hurelhuyag/declarative-protobuf</url>
+        <connection>scm:git:https://github.com/hurelhuyag/declarative-protobuf.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/hurelhuyag/declarative-protobuf.git</developerConnection>
+    </scm>
 
     <modules>
         <module>api</module>
@@ -67,5 +93,86 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+        <!-- Central requires both jars; built on every build, so a javadoc error fails CI before a tag does -->
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.12.0</version>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
     </build>
+
+    <profiles>
+        <!-- Signing and the upload to central.sonatype.com, for .github/workflows/release.yml -->
+        <profile>
+            <id>central</id>
+            <build>
+                <plugins>
+                    <!--
+                        The key and its passphrase come from outside: in the release workflow, the only key in the
+                        runner's keyring and MAVEN_GPG_PASSPHRASE, which 3.2 reads by itself; on a laptop,
+                        -Dgpg.keyname=... and the same environment variable.
+                    -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.7</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                                <configuration>
+                                    <gpgArguments>
+                                        <gpgArgument>--pinentry-mode</gpgArgument>
+                                        <gpgArgument>loopback</gpgArgument>
+                                    </gpgArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- a release on Central can never be replaced or withdrawn; autoPublish skips the portal's button -->
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.11.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <autoPublish>true</autoPublish>
+                            <!-- built and tested with the release, but nothing anyone depends on -->
+                            <excludeArtifacts>
+                                <excludeArtifact>declarative-protobuf-example</excludeArtifact>
+                                <excludeArtifact>declarative-protobuf-benchmark</excludeArtifact>
+                            </excludeArtifacts>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

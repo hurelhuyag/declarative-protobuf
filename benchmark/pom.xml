@@ -15,6 +15,9 @@
 
     <properties>
         <jmh.version>1.37</jmh.version>
+        <!-- not published (see the central profile in the parent), so no sources or javadoc jar -->
+        <maven.source.skip>true</maven.source.skip>
+        <maven.javadoc.skip>true</maven.javadoc.skip>
     </properties>
 
     <dependencies>
