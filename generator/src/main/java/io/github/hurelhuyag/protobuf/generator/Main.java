@@ -23,10 +23,13 @@ import java.util.stream.Stream;
  *       <ul>
  *         <li>{@code --package=<java package>} puts everything generated in one package;</li>
  *         <li>{@code --implements=<message pattern>=<interface>} adds an interface to matching records;</li>
- *         <li>{@code --annotate=<message pattern>=<annotation>} adds a marker annotation to matching records.</li>
+ *         <li>{@code --annotate=<message pattern>=<annotation>} adds a marker annotation to matching records;</li>
+ *         <li>{@code --convert=<message or field>=<java type>:<converter>} declares fields of that message type, or
+ *             that one field, as a Java type of the application's own, mapped by a {@code ProtoConverter}.</li>
  *       </ul>
  *       A message pattern is a full name ({@code example.orders.Order}), a prefix ending in {@code .*}, or
- *       {@code *};</li>
+ *       {@code *}; a conversion names one message or field by its full name
+ *       ({@code example.orders.Order.created_millis});</li>
  *   <li>with no arguments, as a protoc plugin: a {@code CodeGeneratorRequest} on stdin, a
  *       {@code CodeGeneratorResponse} on stdout, so {@code protoc --java-records_out=...} works directly.</li>
  * </ul>
@@ -41,6 +44,7 @@ public final class Main {
         String packageOverride = null;
         List<Customizations.Rule> interfaces = new java.util.ArrayList<>();
         List<Customizations.Rule> annotations = new java.util.ArrayList<>();
+        List<Customizations.Conversion> conversions = new java.util.ArrayList<>();
         for (java.util.Iterator<String> i = rest.iterator(); i.hasNext(); ) {
             String arg = i.next();
             if (arg.startsWith("--package=")) {
@@ -49,6 +53,8 @@ public final class Main {
                 interfaces.add(Customizations.Rule.parse("--implements", arg.substring("--implements=".length())));
             } else if (arg.startsWith("--annotate=")) {
                 annotations.add(Customizations.Rule.parse("--annotate", arg.substring("--annotate=".length())));
+            } else if (arg.startsWith("--convert=")) {
+                conversions.add(Customizations.Conversion.parse(arg.substring("--convert=".length())));
             } else {
                 continue;
             }
@@ -59,11 +65,13 @@ public final class Main {
         } else if (rest.size() >= 2) {
             cli(
                 Path.of(rest.get(0)), Path.of(rest.get(1)), rest.subList(2, rest.size()), packageOverride,
-                new Customizations(interfaces, annotations)
+                new Customizations(interfaces, annotations, conversions)
             );
         } else {
             System.err.println("usage: [--package=<java package>] [--implements=<message pattern>=<interface>]..."
-                + " [--annotate=<message pattern>=<annotation>]... <descriptor-set.pb> <output-dir> [proto-file...]");
+                + " [--annotate=<message pattern>=<annotation>]..."
+                + " [--convert=<message or field>=<java type>:<converter>]..."
+                + " <descriptor-set.pb> <output-dir> [proto-file...]");
             System.exit(2);
         }
     }

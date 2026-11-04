@@ -1,19 +1,19 @@
 package io.github.hurelhuyag.protobuf;
 
 /**
- * Maps a generated wire-side type to a Java type of your own. The schema names the converter, with
- * {@code option (declarative.java_converter)} on a message (every field of that message type is converted) or on
- * a single field; {@code (declarative.java_type)} names {@code T}.
+ * Maps a generated wire-side type to a Java type of your own. The build names the converter, not the schema, which
+ * other languages share: the generator's {@code --convert=<message or field>=<java type>:<converter>} on a message
+ * converts every field of that message type, on a single field just that one.
  * <pre>
- * message Uuid {
- *   option (declarative.java_type) = "java.util.UUID";
- *   option (declarative.java_converter) = "com.acme.UuidConverter";
+ * message Uuid {           // --convert=example.Uuid=java.util.UUID:com.acme.UuidConverter
  *   fixed64 msb = 1;
  *   fixed64 lsb = 2;
  * }
  *
- * public final class UuidConverter implements ProtoConverter&lt;Uuid, UUID&gt; { ... }
+ * public final class UuidConverter implements ProtoConverter&lt;ProtoUuid, UUID&gt; { ... }
  * </pre>
+ * The record of a converted message is generated with a {@code Proto} prefix ({@code ProtoUuid}): it is only the
+ * wire side of {@code T}, and the prefix keeps it from being mistaken for it.
  * {@code W} is what the generator would otherwise have used: the generated record for a message field, or the
  * boxed scalar type ({@code Integer}, {@code Long}, {@code String}, {@code ByteBuffer}, ...) for a scalar field.
  * The generated codec still does all the wire work; a converter only maps values.

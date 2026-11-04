@@ -52,14 +52,6 @@
                     <outputDescriptorFile>${project.build.directory}/generated/descriptors.pb</outputDescriptorFile>
                     <outputDescriptorIncludeImports>true</outputDescriptorIncludeImports>
                     <embedSourcesInClassOutputs>false</embedSourcesInClassOutputs>
-                    <!-- declarative/options.proto travels in the api jar -->
-                    <importDependencies>
-                        <importDependency>
-                            <groupId>io.github.hurelhuyag</groupId>
-                            <artifactId>declarative-protobuf-api</artifactId>
-                            <version>${project.version}</version>
-                        </importDependency>
-                    </importDependencies>
                 </configuration>
                 <executions>
                     <execution>
@@ -97,6 +89,8 @@
                                 <!-- optional customizations: <message pattern>=<java type>, each repeatable -->
                                 <argument>--implements=example.orders.Order=io.github.hurelhuyag.protobuf.example.Identified</argument>
                                 <argument>--annotate=*=io.github.hurelhuyag.protobuf.example.WireRecord</argument>
+                                <!-- every example.orders.Uuid field is a java.util.UUID: <message or field>=<java type>:<converter> -->
+                                <argument>--convert=example.orders.Uuid=java.util.UUID:io.github.hurelhuyag.protobuf.example.UuidConverter</argument>
                                 <argument>${project.build.directory}/generated/descriptors.pb</argument>
                                 <argument>${project.build.directory}/generated-sources/records</argument>
                             </arguments>

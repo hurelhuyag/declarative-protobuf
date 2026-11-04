@@ -1,6 +1,8 @@
 package io.github.hurelhuyag.protobuf.generator;
 
 import com.google.protobuf.CodedOutputStream;
+import com.google.protobuf.DescriptorProtos.DescriptorProto;
+import com.google.protobuf.DescriptorProtos.FileDescriptorSet;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.DynamicMessage;
 import org.junit.jupiter.api.BeforeAll;
@@ -33,7 +35,14 @@ class GeneratorTest {
 
     @BeforeAll
     static void generateAndCompile() throws Exception {
-        sources = Generator.generate(TestSchema.set(), List.of("demo.proto"));
+        sources = Generator.generate(TestSchema.set(), List.of("demo.proto"), null, new Customizations(
+            List.of(), List.of(), List.of(
+                new Customizations.Conversion("demo.Uuid", "java.util.UUID", "demo.UuidConverter"),
+                new Customizations.Conversion(
+                    "demo.Everything.created_millis", "java.time.Instant", "demo.MillisConverter"
+                )
+            )
+        ));
         Path sourceDirectory = dir.resolve("generated");
         for (Map.Entry<String, String> source : sources.entrySet()) {
             Path file = sourceDirectory.resolve(source.getKey());
@@ -59,7 +68,7 @@ class GeneratorTest {
         assertEquals(
             List.of(
                 "demo/Color.java",
-                "demo/Uuid.java", "demo/UuidProtoCodec.java",
+                "demo/ProtoUuid.java", "demo/ProtoUuidProtoCodec.java",
                 "demo/Point.java", "demo/PointProtoCodec.java",
                 "demo/Tree.java", "demo/TreeProtoCodec.java",
                 "demo/Segment.java", "demo/SegmentProtoCodec.java",
@@ -84,11 +93,11 @@ class GeneratorTest {
     }
 
     /**
-     * A converter named by the schema: the record carries {@link java.util.UUID} and {@link java.time.Instant},
+     * Converters the build asked for: the record carries {@link java.util.UUID} and {@link java.time.Instant},
      * the wire still carries the {@code Uuid} message and an {@code int64}.
      */
     @Test
-    void convertersNamedBySchemaOptions() throws Exception {
+    void conversionsFromTheBuild() throws Exception {
         byte[] encoded = bytes("encodeSample");
         DynamicMessage parsed = DynamicMessage.parseFrom(EVERYTHING, encoded);
         DynamicMessage id = (DynamicMessage) parsed.getField(EVERYTHING.findFieldByName("request_id"));
@@ -204,7 +213,8 @@ class GeneratorTest {
                     new Customizations.Rule("demo.Tree", "demo.Named"),
                     new Customizations.Rule("demo.Point", "java.io.Serializable")
                 ),
-                List.of(new Customizations.Rule("demo.*", "demo.Marker"))
+                List.of(new Customizations.Rule("demo.*", "demo.Marker")),
+                List.of()
             )
         );
         Path sourceDirectory = customized.resolve("generated");
@@ -217,12 +227,6 @@ class GeneratorTest {
             sourceDirectory.resolve("demo/Named.java"), "package demo; public interface Named { String name(); }"
         );
         Files.writeString(sourceDirectory.resolve("demo/Marker.java"), "package demo; public @interface Marker {}");
-        for (String handWritten : List.of("UuidConverter", "MillisConverter")) {
-            Files.copy(
-                Path.of("src/test/java/io/github/hurelhuyag/protobuf/generator/" + handWritten + ".java.txt"),
-                sourceDirectory.resolve("demo/" + handWritten + ".java")
-            );
-        }
         Compilation compiled = Compilation.compile(sourceDirectory, customized.resolve("classes"));
         assertTrue(compiled.success(), compiled.messages());
 
@@ -236,10 +240,153 @@ class GeneratorTest {
     void aCustomizationThatMatchesNothingFailsTheBuild() {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Generator.generate(
             TestSchema.set(), List.of("demo.proto"), null, new Customizations(
-                List.of(new Customizations.Rule("demo.Pointt", "java.io.Serializable")), List.of()
+                List.of(new Customizations.Rule("demo.Pointt", "java.io.Serializable")), List.of(), List.of()
             )
         ));
         assertEquals("'demo.Pointt' (for java.io.Serializable) matches no generated message", e.getMessage());
+    }
+
+    /** Without a conversion, a message the build could have converted is an ordinary generated record. */
+    @Test
+    void withoutAConversionAMessageIsItsRecord() throws Exception {
+        Map<String, String> generated = Generator.generate(TestSchema.set(), List.of("demo.proto"));
+        assertTrue(
+            generated.get("demo/Everything.java").contains("List<Uuid> relatedIds"),
+            generated.get("demo/Everything.java")
+        );
+        assertTrue(generated.get("demo/Everything.java").contains("long createdMillis"));
+    }
+
+    /** A converted message's record is prefixed only while it is converted: a schema type next to it may not clash. */
+    @Test
+    void aPrefixedRecordNameTakenByTheSchemaFailsTheBuild() {
+        FileDescriptorSet set = TestSchema.set().toBuilder()
+            .setFile(3, TestSchema.FILE.toBuilder().addMessageType(DescriptorProto.newBuilder().setName("ProtoUuid")))
+            .build();
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Generator.generate(
+            set, List.of("demo.proto"), null, new Customizations(
+                List.of(), List.of(), List.of(new Customizations.Conversion("demo.Uuid", "java.util.UUID", "demo.C"))
+            )
+        ));
+        assertEquals(
+            "'demo.Uuid' is converted, so its record is named ProtoUuid, but the schema declares a ProtoUuid next"
+                + " to it",
+            e.getMessage()
+        );
+    }
+
+    /** A conversion of a map field, a map entry or a name that is not in the schema at all is a build failure. */
+    @Test
+    void aConversionThatNamesNothingConvertibleFailsTheBuild() {
+        for (String target : List.of("demo.Uuidd", "demo.Everything.owners", "demo.Everything.OwnersEntry")) {
+            IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Generator.generate(
+                TestSchema.set(), List.of("demo.proto"), null, new Customizations(
+                    List.of(), List.of(), List.of(new Customizations.Conversion(target, "java.util.UUID", "demo.C"))
+                )
+            ));
+            assertEquals(
+                "'" + target + "' (for demo.C) names no message or field that can be converted", e.getMessage()
+            );
+        }
+    }
+
+    @Test
+    void aTargetConvertedTwiceFailsTheBuild() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Generator.generate(
+            TestSchema.set(), List.of("demo.proto"), null, new Customizations(
+                List.of(), List.of(), List.of(
+                    new Customizations.Conversion("demo.Uuid", "java.util.UUID", "demo.UuidConverter"),
+                    new Customizations.Conversion("demo.Uuid", "java.lang.String", "demo.UuidStrings")
+                )
+            )
+        ));
+        assertEquals("'demo.Uuid' is converted more than once", e.getMessage());
+    }
+
+    @Test
+    void parsesAConversionOption() {
+        assertEquals(
+            new Customizations.Conversion("demo.Uuid", "java.util.UUID", "demo.UuidConverter"),
+            Customizations.Conversion.parse("demo.Uuid=java.util.UUID:demo.UuidConverter")
+        );
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class, () -> Customizations.Conversion.parse("demo.Uuid=java.util.UUID")
+        );
+        assertEquals(
+            "--convert expects <message or field>=<java type>:<converter>, got 'demo.Uuid=java.util.UUID'",
+            e.getMessage()
+        );
+    }
+
+    /**
+     * A converted message whose own fields are converted: the {@code ProtoSegment} record already holds the
+     * application's {@code Xy} values, so the segment converter maps application types only, and the bytes are
+     * still the schema's {@code Segment} of two {@code Point}s.
+     */
+    @Test
+    void aConvertedMessageCanHoldConvertedValues(@TempDir Path nested) throws Exception {
+        Map<String, String> generated = Generator.generate(
+            TestSchema.set(), List.of("demo.proto"), null, new Customizations(
+                List.of(), List.of(), List.of(
+                    new Customizations.Conversion("demo.Point", "demo.Xy", "demo.XyConverter"),
+                    new Customizations.Conversion("demo.Segment", "demo.Line", "demo.LineConverter")
+                )
+            )
+        );
+        Path sourceDirectory = nested.resolve("generated");
+        for (Map.Entry<String, String> source : generated.entrySet()) {
+            Path file = sourceDirectory.resolve(source.getKey());
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, source.getValue());
+        }
+        Files.writeString(sourceDirectory.resolve("demo/Xy.java"), "package demo; public record Xy(int x, int y) {}");
+        Files.writeString(
+            sourceDirectory.resolve("demo/Line.java"), "package demo; public record Line(Xy from, Xy to) {}"
+        );
+        Files.writeString(sourceDirectory.resolve("demo/XyConverter.java"), """
+            package demo;
+            public final class XyConverter implements io.github.hurelhuyag.protobuf.ProtoConverter<ProtoPoint, Xy> {
+                public Xy fromWire(ProtoPoint wire) { return new Xy(wire.x(), wire.y()); }
+                public ProtoPoint toWire(Xy value) { return new ProtoPoint(value.x(), value.y()); }
+            }
+            """);
+        Files.writeString(sourceDirectory.resolve("demo/LineConverter.java"), """
+            package demo;
+            import io.github.hurelhuyag.protobuf.ProtoConverter;
+            public final class LineConverter implements ProtoConverter<ProtoSegment, Line> {
+                public Line fromWire(ProtoSegment wire) { return new Line(wire.start(), wire.end()); }
+                public ProtoSegment toWire(Line value) { return new ProtoSegment(value.from(), value.to()); }
+            }
+            """);
+        Files.writeString(sourceDirectory.resolve("demo/NestedDriver.java"), """
+            package demo;
+            import io.github.hurelhuyag.protobuf.JavaProtobuf;
+            public final class NestedDriver {
+                public static byte[] encode() {
+                    return JavaProtobuf.encode(new LineConverter().toWire(new Line(new Xy(1, 2), new Xy(3, 4))));
+                }
+                public static String decode(byte[] bytes) throws Exception {
+                    return new LineConverter().fromWire(JavaProtobuf.decode(bytes, ProtoSegment.class)).toString();
+                }
+            }
+            """);
+        Compilation compiled = Compilation.compile(sourceDirectory, nested.resolve("classes"));
+        assertTrue(compiled.success(), compiled.messages());
+
+        assertTrue(
+            generated.get("demo/ProtoSegment.java").contains("Xy start,"), generated.get("demo/ProtoSegment.java")
+        );
+        byte[] encoded = (byte[]) compiled.call("demo.NestedDriver", "encode", new Class<?>[0]);
+        Descriptor segment = TestSchema.message("Segment");
+        Descriptor point = TestSchema.message("Point");
+        DynamicMessage parsed = DynamicMessage.parseFrom(segment, encoded);
+        DynamicMessage end = (DynamicMessage) parsed.getField(segment.findFieldByName("end"));
+        assertEquals(3, end.getField(point.findFieldByName("x")));
+        assertEquals(4, end.getField(point.findFieldByName("y")));
+        assertEquals(
+            "Line[from=Xy[x=1, y=2], to=Xy[x=3, y=4]]",
+            compiled.call("demo.NestedDriver", "decode", new Class<?>[]{byte[].class}, (Object) encoded)
+        );
     }
 
     @Test

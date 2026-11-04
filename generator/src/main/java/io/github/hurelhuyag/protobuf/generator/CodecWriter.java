@@ -16,15 +16,15 @@ final class CodecWriter {
     private final List<Field> fields;
     private final SourceWriter w = new SourceWriter();
 
-    private CodecWriter(Descriptor message) {
+    private CodecWriter(Descriptor message, Customizations customizations) {
         this.message = message;
-        this.recordType = Names.javaName(message);
-        this.codecName = simpleName(Names.codecName(message));
-        this.fields = TypeMapper.fields(message);
+        this.recordType = Names.javaName(message, customizations);
+        this.codecName = simpleName(Names.codecName(message, customizations));
+        this.fields = TypeMapper.fields(message, customizations);
     }
 
-    static String write(Descriptor message) {
-        return new CodecWriter(message).write();
+    static String write(Descriptor message, Customizations customizations) {
+        return new CodecWriter(message, customizations).write();
     }
 
     private String write() {

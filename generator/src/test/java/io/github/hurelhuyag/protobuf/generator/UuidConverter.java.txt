@@ -4,16 +4,16 @@ import io.github.hurelhuyag.protobuf.ProtoConverter;
 
 import java.util.UUID;
 
-/** Named by {@code option (declarative.java_converter)} on the {@code Uuid} message. */
-public final class UuidConverter implements ProtoConverter<Uuid, UUID> {
+/** Named by the {@code demo.Uuid} conversion the test passes to the generator. */
+public final class UuidConverter implements ProtoConverter<ProtoUuid, UUID> {
 
     @Override
-    public UUID fromWire(Uuid wire) {
+    public UUID fromWire(ProtoUuid wire) {
         return new UUID(wire.msb(), wire.lsb());
     }
 
     @Override
-    public Uuid toWire(UUID value) {
-        return new Uuid(value.getMostSignificantBits(), value.getLeastSignificantBits());
+    public ProtoUuid toWire(UUID value) {
+        return new ProtoUuid(value.getMostSignificantBits(), value.getLeastSignificantBits());
     }
 }

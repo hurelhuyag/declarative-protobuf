@@ -4,7 +4,7 @@ import io.github.hurelhuyag.protobuf.ProtoConverter;
 
 import java.time.Instant;
 
-/** Named by a field option: an int64 of epoch millis, seen as an Instant. */
+/** Named by the {@code demo.Everything.created_millis} conversion: an int64 of epoch millis, seen as an Instant. */
 public final class MillisConverter implements ProtoConverter<Long, Instant> {
 
     @Override

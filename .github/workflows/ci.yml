@@ -40,7 +40,8 @@ jobs:
 
       # the Gradle plugin is a Gradle build of its own; its functional tests take the generator from ~/.m2
       - name: Build and test the Gradle plugin
-        run: ./gradlew --no-daemon --console=plain -p gradle-plugin build
+        working-directory: gradle-plugin
+        run: ./gradlew --no-daemon --console=plain build
 
       - name: Run the example
         run: >

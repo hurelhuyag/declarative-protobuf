@@ -29,16 +29,16 @@ final class RecordWriter {
     }
 
     /** Inside the record, its own nested types are in scope, so they need no qualifier at all. */
-    private static String type(Field field, Descriptor message) {
-        return field.type().replace(Names.javaName(message) + ".", "");
+    private String type(Field field, Descriptor message) {
+        return field.type().replace(Names.javaName(message, customizations) + ".", "");
     }
 
     private void record(Descriptor message, boolean topLevel) {
-        List<Field> fields = TypeMapper.fields(message);
+        List<Field> fields = TypeMapper.fields(message, customizations);
         w.line("/** Generated from {@code " + message.getFullName() + "}. */");
         if (topLevel) w.line("@Generated(\"" + Generator.NAME + "\")");
         for (String annotation : customizations.annotationsFor(message)) w.line("@" + annotation);
-        String declaration = "public record " + message.getName() + "(";
+        String declaration = "public record " + Names.recordName(message, customizations) + "(";
         List<String> interfaces = customizations.interfacesFor(message);
         String body = (interfaces.isEmpty() ? "" : " implements " + String.join(", ", interfaces)) + " {";
         if (fields.isEmpty()) {
@@ -89,7 +89,7 @@ final class RecordWriter {
             .toList();
         if (required.isEmpty() && collections.isEmpty()) return;
         w.line("");
-        w.open("public " + message.getName() + " {");
+        w.open("public " + Names.recordName(message, customizations) + " {");
         for (Field.Singular field : required) {
             w.line("java.util.Objects.requireNonNull(" + field.name() + ", \"" + field.descriptor().getFullName()
                 + " is not optional\");");

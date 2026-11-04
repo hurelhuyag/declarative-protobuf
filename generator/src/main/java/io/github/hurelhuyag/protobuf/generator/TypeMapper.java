@@ -11,8 +11,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Chooses the Java type for every schema construct. Nothing here is configurable: because both the record and its
- * codec are generated, one type per proto type is enough, and the choice is the lossless one in each case.
+ * Chooses the Java type for every schema construct: the lossless one for each proto type, since both the record and
+ * its codec are generated, unless the build converts a message or field to a type of its own.
  */
 final class TypeMapper {
 
@@ -47,75 +47,66 @@ final class TypeMapper {
      * The components of the record generated for a message, in schema declaration order; a oneof appears at the
      * position of its first member and replaces all of them.
      */
-    static List<Field> fields(Descriptor message) {
+    static List<Field> fields(Descriptor message, Customizations customizations) {
         List<Field> fields = new ArrayList<>();
         List<OneofDescriptor> done = new ArrayList<>();
         for (FieldDescriptor field : message.getFields()) {
             OneofDescriptor oneof = field.getRealContainingOneof();
             if (oneof == null) {
-                fields.add(field(field));
+                fields.add(field(field, customizations));
             } else if (!done.contains(oneof)) {
                 done.add(oneof);
-                fields.add(oneof(oneof));
+                fields.add(oneof(oneof, customizations));
             }
         }
         return fields;
     }
 
-    private static Field field(FieldDescriptor field) {
+    private static Field field(FieldDescriptor field, Customizations customizations) {
         String name = Names.fieldName(field);
         if (field.isMapField()) {
             Descriptor entry = field.getMessageType();
             return new Field.MapField(
-                field, name, value(entry.findFieldByNumber(1)), value(entry.findFieldByNumber(2))
+                field, name, value(entry.findFieldByNumber(1), customizations),
+                value(entry.findFieldByNumber(2), customizations)
             );
         }
         if (field.isRepeated()) {
-            return new Field.Repeated(field, name, value(field), field.isPacked());
+            return new Field.Repeated(field, name, value(field, customizations), field.isPacked());
         }
-        return new Field.Singular(field, name, value(field), field.hasPresence());
+        return new Field.Singular(field, name, value(field, customizations), field.hasPresence());
     }
 
-    private static Field oneof(OneofDescriptor oneof) {
-        String type = Names.javaName(oneof.getContainingType()) + "." + Names.oneofType(oneof);
+    private static Field oneof(OneofDescriptor oneof, Customizations customizations) {
+        String type = Names.javaName(oneof.getContainingType(), customizations) + "." + Names.oneofType(oneof);
         List<Field.Oneof.Case> cases = new ArrayList<>();
         for (FieldDescriptor member : oneof.getFields()) {
-            cases.add(new Field.Oneof.Case(member, type + "." + Names.oneofCase(member), value(member)));
+            cases.add(new Field.Oneof.Case(
+                member, type + "." + Names.oneofCase(member), value(member, customizations)
+            ));
         }
         return new Field.Oneof(oneof, Names.oneofName(oneof), type, cases);
     }
 
-    /** The Java type and coded-stream calls for one value, with any converter the schema asked for applied. */
-    static Value value(FieldDescriptor field) {
-        Value wire = wireValue(field);
-        Options.Converted converted = converterFor(field);
-        return converted == null
-            ? wire
-            : new ConverterValue(wire, converted.javaType(), converted.converterClass());
-    }
-
     /**
-     * The converter for a field: its own {@code (declarative.java_converter)} if it has one, otherwise the one on
-     * the message type it carries.
+     * The Java type and coded-stream calls for one value, through the field's own conversion if the build gave it
+     * one, otherwise through the conversion of the message type it carries.
      */
-    private static Options.Converted converterFor(FieldDescriptor field) {
-        Options.Converted own = Options.of(field.toProto().getOptions(), "field '" + field.getFullName() + "'");
-        if (own != null) return own;
-        if (field.getJavaType() != FieldDescriptor.JavaType.MESSAGE) return null;
-        Descriptor message = field.getMessageType();
-        if (WELL_KNOWN.containsKey(message.getFullName())) return null;
-        return Options.of(message.toProto().getOptions(), "message '" + message.getFullName() + "'");
+    private static Value value(FieldDescriptor field, Customizations customizations) {
+        Value wire = wireValue(field, customizations);
+        Customizations.Conversion conversion = customizations.conversionFor(field.getFullName());
+        if (conversion == null && field.getJavaType() == FieldDescriptor.JavaType.MESSAGE) {
+            conversion = customizations.conversionFor(field.getMessageType().getFullName());
+        }
+        return conversion == null ? wire : new ConverterValue(wire, conversion.javaType(), conversion.converter());
     }
 
-    /** True when a message is only ever seen through a converter, so nothing refers to its record by name. */
-    static Options.Converted converterOn(Descriptor message) {
-        return Options.of(message.toProto().getOptions(), "message '" + message.getFullName() + "'");
-    }
-
-    private static Value wireValue(FieldDescriptor field) {
+    private static Value wireValue(FieldDescriptor field, Customizations customizations) {
         return switch (field.getJavaType()) {
             case INT, LONG, FLOAT, DOUBLE, BOOLEAN, STRING, BYTE_STRING -> Scalar.of(field.getType());
-            case ENUM -> new EnumValue(Names.javaName(field.getEnumType()), zeroConstant(field.getEnumType()));
+            case ENUM -> new EnumValue(
+                Names.javaName(field.getEnumType(), customizations), zeroConstant(field.getEnumType())
+            );
             case MESSAGE -> {
                 MessageValue wellKnown = WELL_KNOWN.get(field.getMessageType().getFullName());
                 if (wellKnown != null) yield wellKnown;
@@ -124,7 +115,8 @@ final class TypeMapper {
                         + field.getMessageType().getFullName() + "', which has no Java mapping yet");
                 }
                 yield new MessageValue(
-                    Names.javaName(field.getMessageType()), Names.codecName(field.getMessageType()), true
+                    Names.javaName(field.getMessageType(), customizations),
+                    Names.codecName(field.getMessageType(), customizations), true
                 );
             }
         };

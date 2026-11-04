@@ -47,6 +47,9 @@ public abstract class GenerateRecords extends DefaultTask {
     @Input
     public abstract ListProperty<String> getAnnotations();
 
+    @Input
+    public abstract ListProperty<String> getConversions();
+
     @OutputDirectory
     public abstract DirectoryProperty getOutputDirectory();
 
@@ -59,6 +62,7 @@ public abstract class GenerateRecords extends DefaultTask {
         if (getJavaPackage().isPresent()) args.add("--package=" + getJavaPackage().get());
         for (String rule : getInterfaces().get()) args.add("--implements=" + rule);
         for (String rule : getAnnotations().get()) args.add("--annotate=" + rule);
+        for (String conversion : getConversions().get()) args.add("--convert=" + conversion);
         args.add(getDescriptorSet().getSingleFile().getAbsolutePath());
         args.add(getOutputDirectory().get().getAsFile().getAbsolutePath());
         getExecOperations().javaexec(spec -> {

@@ -31,26 +31,39 @@ final class Names {
         return file.getOptions().hasJavaPackage() ? file.getOptions().getJavaPackage() : file.getPackage();
     }
 
+    /**
+     * The simple name of the record generated for a message: the schema's, with {@code Proto} in front when the
+     * build converts the message. That record is then only the wire side of the application's own type, and the
+     * prefix keeps the two apart: {@code ProtoUuid} next to {@code java.util.UUID}, not {@code Uuid}.
+     */
+    static String recordName(Descriptor message, Customizations customizations) {
+        return customizations.conversionFor(message.getFullName()) == null
+            ? message.getName()
+            : "Proto" + message.getName();
+    }
+
     /** The qualified Java name of the record or enum generated for a message or enum type. */
-    static String javaName(GenericDescriptor type) {
+    static String javaName(GenericDescriptor type, Customizations customizations) {
         String packageName = javaPackage(type.getFile());
-        String path = nestedPath(type);
+        String path = nestedPath(type, customizations);
         return packageName.isEmpty() ? path : packageName + "." + path;
     }
 
     /** The type's path inside its file, e.g. {@code Outer.Inner}. */
-    static String nestedPath(GenericDescriptor type) {
+    private static String nestedPath(GenericDescriptor type, Customizations customizations) {
         Descriptor parent = type instanceof Descriptor message ? message.getContainingType()
             : type instanceof EnumDescriptor enumType ? enumType.getContainingType()
             : null;
-        String simpleName = type instanceof Descriptor message ? message.getName() : ((EnumDescriptor) type).getName();
-        return parent == null ? simpleName : nestedPath(parent) + "." + simpleName;
+        String simpleName = type instanceof Descriptor message
+            ? recordName(message, customizations)
+            : ((EnumDescriptor) type).getName();
+        return parent == null ? simpleName : nestedPath(parent, customizations) + "." + simpleName;
     }
 
     /** The qualified name of the codec class generated for a message; nested types are flattened with underscores. */
-    static String codecName(Descriptor message) {
+    static String codecName(Descriptor message, Customizations customizations) {
         String packageName = javaPackage(message.getFile());
-        String path = nestedPath(message).replace('.', '_') + "ProtoCodec";
+        String path = nestedPath(message, customizations).replace('.', '_') + "ProtoCodec";
         return packageName.isEmpty() ? path : packageName + "." + path;
     }
 

@@ -52,6 +52,7 @@ class DeclarativeProtobufPluginTest {
             declarativeProtobuf {
                 implement("shop.Order", "shop.Identified")
                 annotate("*", "shop.WireRecord")
+                convert("shop.Uuid", "java.util.UUID", "shop.UuidConverter")
             }
             """);
         write(project.resolve("src/main/proto/shop.proto"), """
@@ -59,11 +60,9 @@ class DeclarativeProtobufPluginTest {
             package shop;
             option java_package = "shop";
 
-            import "declarative/options.proto";
             import "google/protobuf/timestamp.proto";
 
             message Uuid {
-              option (declarative.java) = { type: "java.util.UUID", converter: "shop.UuidConverter" };
               fixed64 msb = 1;
               fixed64 lsb = 2;
             }
@@ -82,10 +81,10 @@ class DeclarativeProtobufPluginTest {
             import io.github.hurelhuyag.protobuf.ProtoConverter;
             import java.util.UUID;
 
-            public final class UuidConverter implements ProtoConverter<Uuid, UUID> {
-                public UUID fromWire(Uuid wire) { return new UUID(wire.msb(), wire.lsb()); }
-                public Uuid toWire(UUID value) {
-                    return new Uuid(value.getMostSignificantBits(), value.getLeastSignificantBits());
+            public final class UuidConverter implements ProtoConverter<ProtoUuid, UUID> {
+                public UUID fromWire(ProtoUuid wire) { return new UUID(wire.msb(), wire.lsb()); }
+                public ProtoUuid toWire(UUID value) {
+                    return new ProtoUuid(value.getMostSignificantBits(), value.getLeastSignificantBits());
                 }
             }
             """);
@@ -135,6 +134,8 @@ class DeclarativeProtobufPluginTest {
         assertEquals(TaskOutcome.SUCCESS, first.task(":test").getOutcome());
         assertTrue(Files.exists(project.resolve("build/generated/sources/records/main/shop/Order.java")));
         assertTrue(Files.exists(project.resolve("build/generated/sources/records/main/shop/OrderProtoCodec.java")));
+        // converted, so only the wire side of java.util.UUID, and prefixed to say so
+        assertTrue(Files.exists(project.resolve("build/generated/sources/records/main/shop/ProtoUuid.java")));
 
         BuildResult second = GradleRunner.create()
             .withProjectDir(project.toFile())

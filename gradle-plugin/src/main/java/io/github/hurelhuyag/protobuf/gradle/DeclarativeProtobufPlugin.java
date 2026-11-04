@@ -19,9 +19,8 @@ import java.util.Properties;
 /**
  * The Gradle counterpart of the Maven wiring in {@code example/pom.xml}: {@code com.google.protobuf} runs protoc
  * for a descriptor set only, a {@link GenerateRecords} task per source set turns it into records and codecs, and
- * its output becomes a Java source directory of that source set. The api jar is added to {@code implementation},
- * which the generated code needs at runtime and which brings {@code declarative/options.proto} onto protoc's import
- * path.
+ * its output becomes a Java source directory of that source set. The api jar, which the generated code needs at
+ * runtime, is added to {@code implementation}.
  */
 public final class DeclarativeProtobufPlugin implements Plugin<Project> {
 
@@ -77,6 +76,7 @@ public final class DeclarativeProtobufPlugin implements Plugin<Project> {
                         task.getJavaPackage().set(extension.getJavaPackage());
                         task.getInterfaces().set(extension.getInterfaces());
                         task.getAnnotations().set(extension.getAnnotations());
+                        task.getConversions().set(extension.getConversions());
                         task.getOutputDirectory().set(project.getLayout().getBuildDirectory().dir(
                             "generated/sources/records/" + sourceSet.getName()
                         ));

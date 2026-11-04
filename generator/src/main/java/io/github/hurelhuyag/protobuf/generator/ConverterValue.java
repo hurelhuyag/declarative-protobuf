@@ -1,7 +1,7 @@
 package io.github.hurelhuyag.protobuf.generator;
 
 /**
- * A value the schema asked to surface as a Java type of its own: the wire-side value is read and written exactly
+ * A value the build asked to surface as a Java type of its own: the wire-side value is read and written exactly
  * as it would otherwise be, with a {@code ProtoConverter} mapping it on the way in and out.
  */
 record ConverterValue(Value wire, String javaType, String converterClass) implements Value {

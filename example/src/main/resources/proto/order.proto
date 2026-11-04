@@ -5,7 +5,6 @@ package example.orders;
 
 option java_package = "io.github.hurelhuyag.protobuf.example";
 
-import "declarative/options.proto";
 import "google/protobuf/timestamp.proto";
 
 enum Status {
@@ -16,14 +15,9 @@ enum Status {
 }
 
 // A UUID as its two 64-bit halves: 20 bytes on the wire, and every language builds its own UUID from them.
-// The two options say that Java should see java.util.UUID here, through the named converter; other languages
-// ignore them and see an ordinary message.
+// Java sees java.util.UUID here because the build says so (--convert in pom.xml); the schema stays the same for
+// every language.
 message Uuid {
-  option (declarative.java) = {
-    type: "java.util.UUID",
-    converter: "io.github.hurelhuyag.protobuf.example.UuidConverter"
-  };
-
   fixed64 msb = 1;
   fixed64 lsb = 2;
 }

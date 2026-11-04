@@ -6,15 +6,12 @@ import com.google.protobuf.DescriptorProtos.EnumValueDescriptorProto;
 import com.google.protobuf.DescriptorProtos.FieldDescriptorProto;
 import com.google.protobuf.DescriptorProtos.FieldDescriptorProto.Label;
 import com.google.protobuf.DescriptorProtos.FieldDescriptorProto.Type;
-import com.google.protobuf.DescriptorProtos.FieldOptions;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.DescriptorProtos.FileDescriptorSet;
 import com.google.protobuf.DescriptorProtos.FileOptions;
 import com.google.protobuf.DescriptorProtos.MessageOptions;
-import com.google.protobuf.ByteString;
 import com.google.protobuf.DescriptorProtos.OneofDescriptorProto;
 import com.google.protobuf.Descriptors.Descriptor;
-import com.google.protobuf.UnknownFieldSet;
 import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.DurationProto;
 import com.google.protobuf.TimestampProto;
@@ -53,8 +50,6 @@ final class TestSchema {
             .addValue(value("RED", 1))
             .addValue(value("GREEN", 2)))
         .addMessageType(DescriptorProto.newBuilder().setName("Uuid")
-            .setOptions(MessageOptions.newBuilder().setUnknownFields(
-                converted("java.util.UUID", "demo.UuidConverter")))
             .addField(field("msb", 1, Type.TYPE_FIXED64))
             .addField(field("lsb", 2, Type.TYPE_FIXED64)))
         .addMessageType(DescriptorProto.newBuilder().setName("Point")
@@ -102,9 +97,7 @@ final class TestSchema {
             .addField(message("nested", 33, ".demo.Everything.Nested").setProto3Optional(true).setOneofIndex(8))
             .addField(message("request_id", 34, ".demo.Uuid").setProto3Optional(true).setOneofIndex(9))
             .addField(message("related_ids", 35, ".demo.Uuid").setLabel(Label.LABEL_REPEATED))
-            .addField(field("created_millis", 36, Type.TYPE_INT64)
-                .setOptions(FieldOptions.newBuilder().setUnknownFields(
-                    converted("java.time.Instant", "demo.MillisConverter"))))
+            .addField(field("created_millis", 36, Type.TYPE_INT64))
             .addField(message("owners", 37, ".demo.Everything.OwnersEntry").setLabel(Label.LABEL_REPEATED))
             .addOneofDecl(OneofDescriptorProto.newBuilder().setName("shape"))
             .addOneofDecl(OneofDescriptorProto.newBuilder().setName("_opt_int32"))
@@ -129,20 +122,6 @@ final class TestSchema {
                 .addField(field("n", 1, Type.TYPE_INT32))
                 .addField(message("kind", 2, ".demo.Everything.Nested.Kind").setType(Type.TYPE_ENUM))))
         .build();
-
-    /** The custom option exactly as protoc serialises it: a JavaType message in extension field 50001. */
-    private static UnknownFieldSet converted(String javaType, String converter) {
-        ByteString value = UnknownFieldSet.newBuilder()
-            .addField(1, UnknownFieldSet.Field.newBuilder()
-                .addLengthDelimited(ByteString.copyFromUtf8(javaType)).build())
-            .addField(2, UnknownFieldSet.Field.newBuilder()
-                .addLengthDelimited(ByteString.copyFromUtf8(converter)).build())
-            .build()
-            .toByteString();
-        return UnknownFieldSet.newBuilder()
-            .addField(50001, UnknownFieldSet.Field.newBuilder().addLengthDelimited(value).build())
-            .build();
-    }
 
     private static EnumValueDescriptorProto.Builder value(String name, int number) {
         return EnumValueDescriptorProto.newBuilder().setName(name).setNumber(number);

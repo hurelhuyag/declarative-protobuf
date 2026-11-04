@@ -5,6 +5,7 @@ import com.google.protobuf.DescriptorProtos.FileDescriptorSet;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.DescriptorValidationException;
 import com.google.protobuf.Descriptors.EnumDescriptor;
+import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Descriptors.FileDescriptor;
 
 import java.util.ArrayList;
@@ -29,16 +30,12 @@ public final class Generator {
     /** Files whose types map to JDK types instead of generated records. */
     private static final String WELL_KNOWN_PREFIX = "google/protobuf/";
 
-    /** Our own options file: imported to be read by the generator, never generated from. */
-    private static final String OPTIONS_FILE = "declarative/options.proto";
-
     private Generator() {
     }
 
     /**
      * @param set            descriptor set, with imports included
-     * @param filesToGenerate proto file names to generate for; empty means every file except protobuf's own and
-     *                        {@value #OPTIONS_FILE}
+     * @param filesToGenerate proto file names to generate for; empty means every file except protobuf's own
      * @return generated sources, keyed by their path relative to a source root
      */
     public static Map<String, String> generate(FileDescriptorSet set, Collection<String> filesToGenerate)
@@ -49,8 +46,8 @@ public final class Generator {
     /**
      * @param packageOverride Java package for everything generated, replacing each file's {@code java_package};
      *                        null to use the schema's own
-     * @param customizations  interfaces and annotations the build adds to generated records; every rule must match
-     *                        at least one of them
+     * @param customizations  interfaces, annotations and conversions the build asks for; every interface and
+     *                        annotation rule must match a generated record, every conversion a message or field
      */
     public static Map<String, String> generate(
         FileDescriptorSet set, Collection<String> filesToGenerate, String packageOverride,
@@ -65,7 +62,7 @@ public final class Generator {
         List<String> records = new ArrayList<>();
         for (String name : protos.keySet()) {
             boolean wanted = filesToGenerate.isEmpty()
-                ? !name.startsWith(WELL_KNOWN_PREFIX) && !name.equals(OPTIONS_FILE)
+                ? !name.startsWith(WELL_KNOWN_PREFIX)
                 : filesToGenerate.contains(name);
             FileDescriptor file = build(name, protos, built, new ArrayList<>());
             if (!wanted) continue;
@@ -81,7 +78,50 @@ public final class Generator {
                     + ") matches no generated message");
             }
         }
+        // a conversion may name a message of an imported file, whose fields elsewhere it then converts
+        Set<String> convertible = new HashSet<>();
+        for (FileDescriptor file : built.values()) {
+            for (Descriptor message : file.getMessageTypes()) convertibleNames(message, customizations, convertible);
+        }
+        Set<String> converted = new HashSet<>();
+        for (Customizations.Conversion conversion : customizations.conversions()) {
+            if (!convertible.contains(conversion.target())) {
+                throw new IllegalArgumentException("'" + conversion.target() + "' (for " + conversion.converter()
+                    + ") names no message or field that can be converted");
+            }
+            if (!converted.add(conversion.target())) {
+                throw new IllegalArgumentException("'" + conversion.target() + "' is converted more than once");
+            }
+        }
         return sources;
+    }
+
+    /**
+     * Full names a conversion can target: a message, nested ones included, and each of its fields but a map. A map
+     * entry is no target, and neither is a map field: a map's values are converted through their message type.
+     * Fails when a converted message's prefixed record name is already taken by a type declared next to it.
+     */
+    private static void convertibleNames(Descriptor message, Customizations customizations, Set<String> names) {
+        names.add(message.getFullName());
+        String recordName = Names.recordName(message, customizations);
+        List<String> siblings = new ArrayList<>();
+        Descriptor parent = message.getContainingType();
+        for (Descriptor sibling : parent == null ? message.getFile().getMessageTypes() : parent.getNestedTypes()) {
+            if (!sibling.getOptions().getMapEntry()) siblings.add(sibling.getName());
+        }
+        for (EnumDescriptor sibling : parent == null ? message.getFile().getEnumTypes() : parent.getEnumTypes()) {
+            siblings.add(sibling.getName());
+        }
+        if (!recordName.equals(message.getName()) && siblings.contains(recordName)) {
+            throw new IllegalArgumentException("'" + message.getFullName() + "' is converted, so its record is named "
+                + recordName + ", but the schema declares a " + recordName + " next to it");
+        }
+        for (FieldDescriptor field : message.getFields()) {
+            if (!field.isMapField()) names.add(field.getFullName());
+        }
+        for (Descriptor nested : message.getNestedTypes()) {
+            if (!nested.getOptions().getMapEntry()) convertibleNames(nested, customizations, names);
+        }
     }
 
     /** Full names of the records generated for a message: itself and its nested messages, but no map entries. */
@@ -106,21 +146,23 @@ public final class Generator {
         }
         for (Descriptor message : file.getMessageTypes()) {
             put(
-                sources, path(directory, message.getName()), RecordWriter.write(message, customizations), packageName,
-                extra
+                sources, path(directory, Names.recordName(message, customizations)),
+                RecordWriter.write(message, customizations), packageName, extra
             );
-            codecs(message, directory, packageName, extra, sources);
+            codecs(message, customizations, directory, packageName, extra, sources);
         }
     }
 
     private static void codecs(
-        Descriptor message, String directory, String packageName, Map<String, String> extra,
-        Map<String, String> sources
+        Descriptor message, Customizations customizations, String directory, String packageName,
+        Map<String, String> extra, Map<String, String> sources
     ) {
-        String path = path(directory, simpleName(Names.codecName(message)));
-        put(sources, path, CodecWriter.write(message), packageName, extra);
+        String path = path(directory, simpleName(Names.codecName(message, customizations)));
+        put(sources, path, CodecWriter.write(message, customizations), packageName, extra);
         for (Descriptor nested : message.getNestedTypes()) {
-            if (!nested.getOptions().getMapEntry()) codecs(nested, directory, packageName, extra, sources);
+            if (!nested.getOptions().getMapEntry()) {
+                codecs(nested, customizations, directory, packageName, extra, sources);
+            }
         }
     }
 
@@ -136,7 +178,7 @@ public final class Generator {
      */
     private static Map<String, String> importableTypes(FileDescriptor file, Customizations customizations) {
         Set<String> declared = new HashSet<>();
-        for (Descriptor message : file.getMessageTypes()) declared.add(message.getName());
+        for (Descriptor message : file.getMessageTypes()) declared.add(Names.recordName(message, customizations));
         for (EnumDescriptor enumType : file.getEnumTypes()) declared.add(enumType.getName());
         Set<String> introduced = new TreeSet<>();
         for (Descriptor message : file.getMessageTypes()) introducedTypes(message, customizations, introduced);
@@ -158,7 +200,7 @@ public final class Generator {
         // a generic interface is imported by its raw name; its type arguments are left as written
         for (String type : customizations.interfacesFor(message)) types.add(type.split("<", 2)[0]);
         types.addAll(customizations.annotationsFor(message));
-        for (Field field : TypeMapper.fields(message)) {
+        for (Field field : TypeMapper.fields(message, customizations)) {
             if (field instanceof Field.Singular s) add(types, s.value());
             else if (field instanceof Field.Repeated r) add(types, r.element());
             else if (field instanceof Field.MapField m) {
